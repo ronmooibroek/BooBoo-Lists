@@ -94,9 +94,10 @@
   /* ---------- List ---------- */
   main { flex: 1; padding: 6px 14px 130px; }
   .item {
-    display: flex; align-items: flex-start; gap: 13px; padding: 13px 14px; margin: 8px 0;
+    display: flex; align-items: center; gap: 13px; padding: 11px 14px; margin: 7px 0;
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
     box-shadow: var(--shadow); animation: pop .22s ease both;
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   }
   @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
   .check {
@@ -108,6 +109,8 @@
   .item.done .check { background: var(--done); border-color: var(--done); }
   .item.done .check svg { opacity: 1; transform: scale(1); }
   .body { flex: 1; min-width: 0; }
+  .body.qty-tap { cursor: pointer; user-select: none; -webkit-user-select: none; }
+  .tqty { color: var(--muted); font-weight: 600; }
   .text { font-size: 16px; line-height: 1.35; word-break: break-word; }
   .item.done .text { text-decoration: line-through; color: var(--muted); }
   .meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); }
@@ -144,6 +147,41 @@
   .sdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .sx { color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; }
   .sx:active { color: var(--accent); }
+
+  /* ---------- Long-press action sheet ---------- */
+  .sheet-backdrop {
+    position: fixed; inset: 0; z-index: 60; background: rgba(46,42,37,.38);
+    display: flex; align-items: flex-end; justify-content: center;
+    animation: fadeIn .2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } }
+  .sheet {
+    width: 100%; max-width: 600px; background: var(--surface);
+    border-radius: 22px 22px 0 0; padding: 8px 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 40px rgba(46,42,37,.22);
+    animation: sheetUp .25s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes sheetUp { from { transform: translateY(100%); } }
+  .sheet-title {
+    text-align: center; font-weight: 600; color: var(--muted); font-size: 14px;
+    padding: 12px 8px 8px; word-break: break-word;
+  }
+  .sheet-act {
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    background: var(--bg); border: none; border-radius: 14px; cursor: pointer;
+    font-family: inherit; font-size: 16px; font-weight: 500; color: var(--ink);
+    padding: 15px 18px; margin: 7px 0; text-align: left;
+  }
+  .sheet-act:active { filter: brightness(.96); }
+  .sheet-act svg { width: 21px; height: 21px; flex-shrink: 0; }
+  .sheet-act.keep svg { color: var(--done); }
+  .sheet-act.danger, .sheet-act.danger svg { color: #c0392b; }
+  .sheet-cancel {
+    width: 100%; background: none; border: none; cursor: pointer;
+    font-family: inherit; font-size: 16px; font-weight: 600; color: var(--muted);
+    padding: 15px; margin-top: 2px;
+  }
 
   .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty .em-mark { font-size: 40px; margin-bottom: 8px; }
@@ -256,6 +294,15 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Long-press action sheet -->
+  <div id="sheet" class="sheet-backdrop hidden">
+    <div class="sheet">
+      <div class="sheet-title" id="sheetTitle"></div>
+      <div id="sheetActions"></div>
+      <button class="sheet-cancel" id="sheetCancel">Cancel</button>
     </div>
   </div>
 </div>
@@ -460,56 +507,93 @@
     }
   }
 
-  function baseRow(it) {
+  function rowShell(it) {
     const el = document.createElement("div");
     el.className = "item" + (it.done ? " done" : "");
     el.innerHTML = `
       <button class="check" aria-label="Toggle">${checkSVG}</button>
-      <div class="body">
-        <div class="text"></div>
-        <div class="meta"><span class="dot"></span><span class="byname"></span></div>
-      </div>
+      <div class="body"></div>
       <div class="row-actions"></div>`;
-    el.querySelector(".text").textContent = it.text;
-    el.querySelector(".byname").textContent = it.addedBy || "";
-    el.querySelector(".dot").style.background = colorFor(it.uid);
     el.querySelector(".check").onclick = () => updateDoc(doc(db, "items", it.id), { done: !it.done });
     return el;
   }
 
-  function delButton(it) {
-    const b = document.createElement("button");
-    b.className = "del"; b.setAttribute("aria-label", "Delete forever");
-    b.innerHTML = trashSVG;
-    b.onclick = () => deleteDoc(doc(db, "items", it.id));
-    return b;
+  function attachLongPress(el, handler) {
+    let timer = null;
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    const start = () => { cancel(); timer = setTimeout(() => { timer = null; handler(); }, 500); };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", cancel, { passive: true });
+    el.addEventListener("touchend", cancel);
+    el.addEventListener("touchcancel", cancel);
+    el.addEventListener("mousedown", start);
+    el.addEventListener("mouseup", cancel);
+    el.addEventListener("mouseleave", cancel);
   }
 
+  let sheetOpenedAt = 0;
+  function openSheet(it) {
+    $("sheetTitle").textContent = it.text;
+    const acts = $("sheetActions");
+    acts.innerHTML = "";
+    if (it.list === "groceries") {
+      const keep = document.createElement("button");
+      keep.className = "sheet-act keep";
+      keep.innerHTML = saveSVG + "<span>Keep for next time</span>";
+      keep.onclick = () => { updateDoc(doc(db, "items", it.id), { archived: true, done: false }); closeSheet(); };
+      acts.appendChild(keep);
+    }
+    const del = document.createElement("button");
+    del.className = "sheet-act danger";
+    del.innerHTML = trashSVG + "<span>Delete</span>";
+    del.onclick = () => { deleteDoc(doc(db, "items", it.id)); closeSheet(); };
+    acts.appendChild(del);
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
+  function closeSheet() { $("sheet").classList.add("hidden"); }
+  $("sheetCancel").onclick = closeSheet;
+  $("sheet").addEventListener("click", (e) => {
+    if (e.target.id === "sheet" && Date.now() - sheetOpenedAt > 350) closeSheet();
+  });
+
   function taskRow(it) {
-    const el = baseRow(it);
-    el.querySelector(".row-actions").appendChild(delButton(it));
+    const el = rowShell(it);
+    const body = el.querySelector(".body");
+    body.innerHTML = `<div class="text"></div><div class="meta"><span class="dot"></span><span class="byname"></span></div>`;
+    body.querySelector(".text").textContent = it.text;
+    body.querySelector(".byname").textContent = it.addedBy || "";
+    body.querySelector(".dot").style.background = colorFor(it.uid);
+    attachLongPress(el, () => openSheet(it));
     return el;
   }
 
   function groceryRow(it) {
-    const el = baseRow(it);
-    const actions = el.querySelector(".row-actions");
-    const store = it.store || "";
+    const el = rowShell(it);
+    const body = el.querySelector(".body");
+    const qty = it.qty || 1;
+    body.innerHTML = `<div class="text"><span class="tname"></span><span class="tqty"></span></div>`;
+    body.querySelector(".tname").textContent = it.text;
+    if (qty > 1) body.querySelector(".tqty").textContent = ` (${qty})`;
+
     if (!it.done) {
+      // Tap: right half = more, left half = less (min 1). Long-press = options.
+      body.classList.add("qty-tap");
+      body.onclick = (e) => {
+        const rect = body.getBoundingClientRect();
+        const inc = (e.clientX - rect.left) > rect.width / 2 ? 1 : -1;
+        updateDoc(doc(db, "items", it.id), { qty: Math.max(1, qty + inc) });
+      };
+      const store = it.store || "";
       const chip = document.createElement("button");
       chip.className = "store-chip" + (store ? "" : " empty");
       chip.textContent = store || "+ store";
       if (store) { chip.style.background = STORE_COLOR[store]; chip.style.color = "#fff"; chip.style.borderColor = "transparent"; }
       chip.onclick = () => updateDoc(doc(db, "items", it.id), { store: nextStore(store) });
-      actions.appendChild(chip);
-    } else {
-      const save = document.createElement("button");
-      save.className = "act save"; save.setAttribute("aria-label", "Save for next time");
-      save.innerHTML = saveSVG;
-      save.onclick = () => updateDoc(doc(db, "items", it.id), { archived: true, done: false });
-      actions.appendChild(save);
+      el.querySelector(".row-actions").appendChild(chip);
     }
-    actions.appendChild(delButton(it));
+
+    attachLongPress(el, () => openSheet(it));
     return el;
   }
 
@@ -545,7 +629,7 @@
     input.value = "";
     input.focus(); // keep keyboard up for rapid entry
     await addDoc(itemsCol, {
-      text, list: currentList, done: false, archived: false, store: "",
+      text, list: currentList, done: false, archived: false, store: "", qty: 1,
       addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp()
     });
   }
