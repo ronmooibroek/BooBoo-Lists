@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#f7f1e8" />
+<title>Our Lists</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f7f1e8;
+    --surface: #fffdf9;
+    --ink: #2e2a25;
+    --muted: #948a7e;
+    --accent: #c75d3c;
+    --accent-dark: #a8472b;
+    --done: #8a9a73;
+    --line: #ebe2d4;
+    --shadow: 0 1px 2px rgba(46,42,37,.05), 0 8px 24px rgba(46,42,37,.06);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: "DM Sans", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    background-image: radial-gradient(circle at 12% 8%, rgba(199,93,60,.06), transparent 40%),
+                      radial-gradient(circle at 90% 100%, rgba(138,154,115,.07), transparent 45%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 600px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; }
+
+  /* ---------- Sign-in screen ---------- */
+  .signin {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 40px 28px; gap: 8px;
+  }
+  .signin h1 { font-family: "Fraunces", serif; font-weight: 600; font-size: 44px; margin: 0; letter-spacing: -.5px; }
+  .signin p { color: var(--muted); margin: 0 0 24px; font-size: 16px; max-width: 280px; }
+  .mark {
+    width: 78px; height: 78px; border-radius: 22px; margin-bottom: 14px;
+    background: var(--accent); color: #fff; display: grid; place-items: center;
+    font-family: "Fraunces", serif; font-size: 38px; box-shadow: var(--shadow);
+    transform: rotate(-4deg);
+  }
+  .gbtn {
+    display: inline-flex; align-items: center; gap: 12px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+    padding: 13px 22px; border-radius: 999px; font-size: 16px; font-weight: 500;
+    font-family: inherit; box-shadow: var(--shadow); transition: transform .12s ease;
+  }
+  .gbtn:active { transform: scale(.97); }
+  .gbtn svg { width: 19px; height: 19px; }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 22px 14px; padding-top: max(20px, env(safe-area-inset-top));
+  }
+  .brand { font-family: "Fraunces", serif; font-weight: 600; font-size: 27px; letter-spacing: -.4px; }
+  .who { display: flex; align-items: center; gap: 9px; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+    color: #fff; font-weight: 600; font-size: 14px; flex-shrink: 0;
+  }
+  .signout {
+    background: none; border: none; color: var(--muted); font-family: inherit;
+    font-size: 13px; cursor: pointer; padding: 6px; text-decoration: underline; text-underline-offset: 2px;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tabs {
+    display: flex; gap: 6px; margin: 4px 18px 8px; padding: 5px;
+    background: rgba(46,42,37,.04); border-radius: 14px;
+  }
+  .tab {
+    flex: 1; border: none; background: none; font-family: inherit; cursor: pointer;
+    padding: 10px; border-radius: 10px; font-size: 15px; font-weight: 600; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; gap: 7px; transition: all .18s ease;
+  }
+  .tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+  .count {
+    font-size: 12px; font-weight: 600; min-width: 20px; height: 20px; padding: 0 6px;
+    border-radius: 999px; display: inline-grid; place-items: center;
+    background: rgba(46,42,37,.07); color: var(--muted);
+  }
+  .tab.active .count { background: var(--accent); color: #fff; }
+
+  /* ---------- List ---------- */
+  main { flex: 1; padding: 6px 14px 130px; }
+  .item {
+    display: flex; align-items: flex-start; gap: 13px; padding: 13px 14px; margin: 8px 0;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: var(--shadow); animation: pop .22s ease both;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+  .check {
+    width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line);
+    flex-shrink: 0; margin-top: 1px; cursor: pointer; background: none; padding: 0;
+    display: grid; place-items: center; transition: all .15s ease;
+  }
+  .check svg { width: 13px; height: 13px; opacity: 0; transform: scale(.5); transition: all .15s ease; color: #fff; }
+  .item.done .check { background: var(--done); border-color: var(--done); }
+  .item.done .check svg { opacity: 1; transform: scale(1); }
+  .body { flex: 1; min-width: 0; }
+  .text { font-size: 16px; line-height: 1.35; word-break: break-word; }
+  .item.done .text { text-decoration: line-through; color: var(--muted); }
+  .meta { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .del {
+    background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px;
+    border-radius: 8px; flex-shrink: 0; line-height: 0; opacity: .55; transition: opacity .15s, color .15s;
+  }
+  .del:active { color: var(--accent); opacity: 1; }
+  .del svg { width: 17px; height: 17px; }
+
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .empty .em-mark { font-size: 40px; margin-bottom: 8px; }
+  .clear-done {
+    display: block; margin: 16px auto 0; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-family: inherit; font-size: 13px; padding: 8px 14px;
+    border-radius: 999px; text-decoration: underline; text-underline-offset: 2px;
+  }
+
+  /* ---------- Add bar ---------- */
+  .addbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    padding: 12px 14px; padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--bg) 70%, rgba(247,241,232,0));
+  }
+  .addinner {
+    max-width: 600px; margin: 0 auto; display: flex; gap: 9px; align-items: center;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 7px 7px 7px 16px; box-shadow: 0 4px 24px rgba(46,42,37,.1);
+  }
+  .addinner input {
+    flex: 1; border: none; outline: none; background: none; font-family: inherit;
+    font-size: 16px; color: var(--ink); padding: 8px 0;
+  }
+  .addinner input::placeholder { color: var(--muted); }
+  .add {
+    width: 40px; height: 40px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; flex-shrink: 0; display: grid; place-items: center;
+    transition: transform .12s, background .12s;
+  }
+  .add:active { transform: scale(.92); background: var(--accent-dark); }
+  .add svg { width: 20px; height: 20px; }
+
+  .hidden { display: none !important; }
+  #loading { flex: 1; display: grid; place-items: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div id="loading">Loading…</div>
+
+  <!-- Sign in -->
+  <div id="signin" class="signin hidden">
+    <div class="mark">L</div>
+    <h1>Our Lists</h1>
+    <p>One shared place for tasks and groceries. Sign in to sync.</p>
+    <button class="gbtn" id="googleBtn">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/></svg>
+      Continue with Google
+    </button>
+  </div>
+
+  <!-- App -->
+  <div id="main" class="hidden" style="display:flex;flex-direction:column;flex:1;">
+    <header>
+      <div class="brand">Our Lists</div>
+      <div class="who">
+        <div class="avatar" id="avatar"></div>
+        <button class="signout" id="signoutBtn">Sign out</button>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab active" data-list="groceries">🛒 Groceries <span class="count" id="count-groceries">0</span></button>
+      <button class="tab" data-list="tasks">✓ Tasks <span class="count" id="count-tasks">0</span></button>
+    </div>
+
+    <main id="list"></main>
+
+    <div class="addbar">
+      <div class="addinner">
+        <input id="addInput" type="text" placeholder="Add an item…" autocomplete="off" enterkeyhint="done" />
+        <button class="add" id="addBtn" aria-label="Add">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+           setPersistence, browserLocalPersistence }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot,
+           query, orderBy, serverTimestamp, writeBatch }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  /* ============================================================
+     STEP 1 — PASTE YOUR FIREBASE CONFIG HERE
+     Firebase console → Project settings → "Your apps" → Web app → Config
+     ============================================================ */
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFflo342VzLk4JSsJf__e1yK-OVA78fkc",
+    authDomain: "booboo-list.firebaseapp.com",
+    projectId: "booboo-list",
+    storageBucket: "booboo-list.firebasestorage.app",
+    messagingSenderId: "59995644087",
+    appId: "1:59995644087:web:2d3e5d78105238cd826d32"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+  const itemsCol = collection(db, "items");
+
+  let currentList = "groceries";
+  let allItems = [];
+  let unsub = null;
+  let me = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  // Stable warm color per person (so each of you is recognizable)
+  function colorFor(uid) {
+    const palette = ["#c75d3c", "#5b8c8a", "#8a9a73", "#b08544", "#9a6a8c", "#6a7fa8"];
+    let h = 0; for (const c of (uid || "")) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return palette[h % palette.length];
+  }
+  const firstName = (u) => (u.displayName || u.email || "?").split(/[ @]/)[0];
+
+  /* ---------- Auth ---------- */
+  $("googleBtn").onclick = async () => {
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      alert("Sign-in failed: " + (e.message || e.code));
+    }
+  };
+  $("signoutBtn").onclick = () => signOut(auth);
+
+  onAuthStateChanged(auth, (user) => {
+    $("loading").classList.add("hidden");
+    if (user) {
+      me = user;
+      $("signin").classList.add("hidden");
+      $("main").classList.remove("hidden");
+      const av = $("avatar");
+      av.textContent = firstName(user)[0].toUpperCase();
+      av.style.background = colorFor(user.uid);
+      startSync();
+      setTimeout(() => $("addInput").focus(), 200);
+    } else {
+      me = null;
+      if (unsub) { unsub(); unsub = null; }
+      $("main").classList.add("hidden");
+      $("signin").classList.remove("hidden");
+    }
+  });
+
+  /* ---------- Live data ---------- */
+  function startSync() {
+    if (unsub) unsub();
+    const q = query(itemsCol, orderBy("createdAt", "asc"));
+    unsub = onSnapshot(q, (snap) => {
+      allItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      render();
+    }, (err) => {
+      console.error(err);
+      $("list").innerHTML = '<div class="empty">Could not load. Check your Firestore security rules.</div>';
+    });
+  }
+
+  /* ---------- Render ---------- */
+  function render() {
+    const groc = allItems.filter((i) => i.list === "groceries");
+    const task = allItems.filter((i) => i.list === "tasks");
+    $("count-groceries").textContent = groc.filter((i) => !i.done).length;
+    $("count-tasks").textContent = task.filter((i) => !i.done).length;
+
+    const items = (currentList === "groceries" ? groc : task)
+      .slice()
+      .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)); // open first, done sink
+
+    const list = $("list");
+    if (items.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="em-mark">${currentList === "groceries" ? "🧺" : "🌿"}</div>Nothing here yet.<br>Add the first item below.</div>`;
+      return;
+    }
+
+    list.innerHTML = "";
+    let shownClear = false;
+    for (const it of items) {
+      const el = document.createElement("div");
+      el.className = "item" + (it.done ? " done" : "");
+      el.innerHTML = `
+        <button class="check" aria-label="Toggle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+        </button>
+        <div class="body">
+          <div class="text"></div>
+          <div class="meta"><span class="dot"></span><span class="byname"></span></div>
+        </div>
+        <button class="del" aria-label="Delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>`;
+      el.querySelector(".text").textContent = it.text;
+      el.querySelector(".byname").textContent = it.addedBy || "";
+      el.querySelector(".dot").style.background = colorFor(it.uid);
+      el.querySelector(".check").onclick = () => updateDoc(doc(db, "items", it.id), { done: !it.done });
+      el.querySelector(".del").onclick = () => deleteDoc(doc(db, "items", it.id));
+      list.appendChild(el);
+      shownClear = shownClear || it.done;
+    }
+
+    if (shownClear) {
+      const btn = document.createElement("button");
+      btn.className = "clear-done";
+      btn.textContent = "Clear completed";
+      btn.onclick = clearDone;
+      list.appendChild(btn);
+    }
+  }
+
+  async function clearDone() {
+    const batch = writeBatch(db);
+    allItems.filter((i) => i.list === currentList && i.done)
+            .forEach((i) => batch.delete(doc(db, "items", i.id)));
+    await batch.commit();
+  }
+
+  /* ---------- Add ---------- */
+  async function addItem() {
+    const input = $("addInput");
+    const text = input.value.trim();
+    if (!text || !me) return;
+    input.value = "";
+    input.focus(); // keep keyboard up for rapid entry
+    await addDoc(itemsCol, {
+      text, list: currentList, done: false,
+      addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp()
+    });
+  }
+  $("addBtn").onclick = addItem;
+  $("addInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } });
+
+  /* ---------- Tabs ---------- */
+  document.querySelectorAll(".tab").forEach((t) => {
+    t.onclick = () => {
+      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+      t.classList.add("active");
+      currentList = t.dataset.list;
+      render();
+      $("addInput").focus();
+    };
+  });
+</script>
+</body>
+</html>
