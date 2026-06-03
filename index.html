@@ -191,6 +191,34 @@
     font-family: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 2px; padding: 6px;
   }
 
+  /* ---------- Task sheet controls ---------- */
+  .sheet-section { background: var(--bg); border-radius: 14px; padding: 12px 14px; margin: 7px 0; }
+  .sheet-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 10px; }
+  .people { display: flex; flex-wrap: wrap; gap: 8px; }
+  .person {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-family: inherit;
+    font-size: 14px; color: var(--ink); background: var(--surface); border: 1.5px solid var(--line);
+    border-radius: 999px; padding: 7px 13px;
+  }
+  .person.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .pdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .due-row { display: flex; align-items: center; gap: 10px; }
+  .due-input {
+    flex: 1; font-family: inherit; font-size: 15px; padding: 9px 11px;
+    border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink);
+  }
+  .due-clear { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+  .repeat-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 15px; color: var(--ink); }
+  .rep-input {
+    width: 56px; font-family: inherit; font-size: 15px; padding: 8px; text-align: center;
+    border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink);
+  }
+
+  .m-assignee { display: inline-flex; align-items: center; gap: 5px; }
+  .m-due { color: var(--muted); }
+  .m-due.overdue { color: #c0392b; font-weight: 600; }
+  .m-rep { color: var(--muted); }
+
   .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty .em-mark { font-size: 40px; margin-bottom: 8px; }
   .clear-done {
@@ -376,6 +404,23 @@
   const saveSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
   const filterSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>`;
 
+  const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function dueLabel(iso) {
+    const t = todayISO();
+    if (iso === t) return "Due today";
+    if (iso === addDays(t, 1)) return "Due tomorrow";
+    const d = new Date(iso + "T00:00:00");
+    return "Due " + MON[d.getMonth()] + " " + d.getDate();
+  }
+  function knownPeople() {
+    const map = new Map();
+    if (me) map.set(me.uid, firstName(me));
+    for (const it of allItems) if (it.uid) map.set(it.uid, it.addedBy || "?");
+    return [...map.entries()].map(([uid, name]) => ({ uid, name }));
+  }
+
   /* ---------- Auth (Google Identity Services — works on iPhone) ---------- */
   async function handleCredential(response) {
     try {
@@ -453,8 +498,9 @@
   function render() {
     const groc = allItems.filter((i) => i.list === "groceries");
     const task = allItems.filter((i) => i.list === "tasks");
+    const today = todayISO();
     $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
-    $("count-tasks").textContent = task.filter((i) => !i.done).length;
+    $("count-tasks").textContent = task.filter((i) => !i.done && !(i.hiddenUntil && i.hiddenUntil > today)).length;
 
     const list = $("list");
     list.innerHTML = "";
@@ -512,7 +558,13 @@
   }
 
   function renderTasks(task, list) {
-    const arr = task.slice().sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
+    const today = todayISO();
+    const arr = task.filter((i) => !(i.hiddenUntil && i.hiddenUntil > today))
+      .sort((a, b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        const ad = a.due || "9999-99-99", bd = b.due || "9999-99-99";
+        return ad < bd ? -1 : ad > bd ? 1 : 0;
+      });
     if (arr.length === 0) {
       list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
@@ -607,14 +659,101 @@
     return bar;
   }
 
+  function openTaskSheet(it) {
+    $("sheetTitle").textContent = it.text;
+    const acts = $("sheetActions");
+    acts.innerHTML = "";
+
+    // Assign to
+    const aWrap = document.createElement("div"); aWrap.className = "sheet-section";
+    aWrap.innerHTML = `<div class="sheet-label">Assign to</div><div class="people"></div>`;
+    const people = aWrap.querySelector(".people");
+    const addPerson = (uid, name) => {
+      const b = document.createElement("button");
+      b.className = "person" + ((it.assigneeUid || "") === uid ? " on" : "");
+      b.innerHTML = `<span class="pdot"></span><span class="pn"></span>`;
+      b.querySelector(".pn").textContent = name;
+      b.querySelector(".pdot").style.background = uid ? colorFor(uid) : "var(--line)";
+      b.onclick = () => {
+        updateDoc(doc(db, "items", it.id), { assignee: uid ? name : "", assigneeUid: uid });
+        it.assigneeUid = uid;
+        people.querySelectorAll(".person").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+      };
+      people.appendChild(b);
+    };
+    addPerson("", "Anyone");
+    for (const p of knownPeople()) addPerson(p.uid, p.name);
+    acts.appendChild(aWrap);
+
+    // Due date
+    const dWrap = document.createElement("div"); dWrap.className = "sheet-section";
+    dWrap.innerHTML = `<div class="sheet-label">Due date</div><div class="due-row"><input type="date" class="due-input"><button class="due-clear">Clear</button></div>`;
+    const dInput = dWrap.querySelector(".due-input");
+    if (it.due) dInput.value = it.due;
+    dInput.onchange = () => updateDoc(doc(db, "items", it.id), { due: dInput.value || "" });
+    dWrap.querySelector(".due-clear").onclick = () => { dInput.value = ""; updateDoc(doc(db, "items", it.id), { due: "" }); };
+    acts.appendChild(dWrap);
+
+    // Repeat
+    const rWrap = document.createElement("div"); rWrap.className = "sheet-section";
+    rWrap.innerHTML = `<div class="sheet-label">Repeat</div><div class="repeat-row">Reappears <input type="number" min="1" inputmode="numeric" class="rep-input"> days after I check it off</div>`;
+    const rInput = rWrap.querySelector(".rep-input");
+    if (it.repeatDays) rInput.value = it.repeatDays;
+    rInput.onchange = () => {
+      const n = parseInt(rInput.value, 10);
+      updateDoc(doc(db, "items", it.id), { repeatDays: n > 0 ? n : 0 });
+    };
+    acts.appendChild(rWrap);
+
+    // Delete
+    const del = document.createElement("button");
+    del.className = "sheet-act danger";
+    del.innerHTML = trashSVG + "<span>Delete</span>";
+    del.onclick = () => { deleteDoc(doc(db, "items", it.id)); closeSheet(); };
+    acts.appendChild(del);
+
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
+
   function taskRow(it) {
     const el = rowShell(it);
     const body = el.querySelector(".body");
-    body.innerHTML = `<div class="text"></div><div class="meta"><span class="dot"></span><span class="byname"></span></div>`;
+    body.innerHTML = `<div class="text"></div><div class="meta"></div>`;
     body.querySelector(".text").textContent = it.text;
-    body.querySelector(".byname").textContent = it.addedBy || "";
-    body.querySelector(".dot").style.background = colorFor(it.uid);
-    attachLongPress(el, () => openSheet(it));
+    const meta = body.querySelector(".meta");
+
+    if (it.assignee) {
+      const a = document.createElement("span"); a.className = "m-assignee";
+      a.innerHTML = `<span class="dot"></span><span class="an"></span>`;
+      a.querySelector(".dot").style.background = colorFor(it.assigneeUid || "");
+      a.querySelector(".an").textContent = it.assignee;
+      meta.appendChild(a);
+    }
+    if (it.due) {
+      const d = document.createElement("span");
+      d.className = "m-due" + (it.due < todayISO() ? " overdue" : "");
+      d.textContent = dueLabel(it.due);
+      meta.appendChild(d);
+    }
+    if (it.repeatDays > 0) {
+      const r = document.createElement("span");
+      r.className = "m-rep";
+      r.textContent = "↻ " + it.repeatDays + "d";
+      meta.appendChild(r);
+    }
+    if (!meta.children.length) meta.remove();
+
+    // Repeating tasks reschedule on check-off instead of staying done
+    if (it.repeatDays > 0 && !it.done) {
+      el.querySelector(".check").onclick = () => {
+        const next = addDays(todayISO(), it.repeatDays);
+        updateDoc(doc(db, "items", it.id), { hiddenUntil: next, due: next });
+      };
+    }
+
+    attachLongPress(el, () => openTaskSheet(it));
     return el;
   }
 
