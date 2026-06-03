@@ -119,6 +119,32 @@
   .del:active { color: var(--accent); opacity: 1; }
   .del svg { width: 17px; height: 17px; }
 
+  .row-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; align-self: center; }
+  .store-chip {
+    font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+    padding: 6px 11px; border-radius: 999px; transition: transform .12s;
+  }
+  .store-chip.empty { color: var(--muted); font-weight: 500; }
+  .store-chip:active { transform: scale(.93); }
+  .act { background: none; border: none; cursor: pointer; color: var(--done); padding: 5px; border-radius: 8px; line-height: 0; opacity: .85; }
+  .act svg { width: 19px; height: 19px; }
+  .act.save:active { color: var(--accent); transform: scale(.9); }
+
+  .suggest { margin-top: 24px; padding-top: 16px; border-top: 1px dashed var(--line); }
+  .suggest-h { font-family: "Fraunces", serif; font-size: 18px; font-weight: 600; margin: 0 2px 11px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .schip {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+    padding: 7px 7px 7px 13px; font-family: inherit; font-size: 14px; color: var(--ink);
+    box-shadow: var(--shadow); transition: transform .12s;
+  }
+  .schip:active { transform: scale(.95); }
+  .sdot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .sx { color: var(--muted); font-size: 18px; line-height: 1; padding: 0 4px; }
+  .sx:active { color: var(--accent); }
+
   .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty .em-mark { font-size: 40px; margin-bottom: 8px; }
   .clear-done {
@@ -153,12 +179,50 @@
 
   .hidden { display: none !important; }
   #loading { flex: 1; display: grid; place-items: center; color: var(--muted); }
+
+  /* ---------- Intro / love screen ---------- */
+  .intro {
+    position: fixed; inset: 0; z-index: 50; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; padding: 24px; text-align: center;
+    background: var(--bg);
+    background-image: radial-gradient(circle at 50% 40%, rgba(214,69,47,.12), transparent 62%);
+    animation: introIn .4s ease;
+  }
+  .intro.fade-out { animation: introOut .55s ease forwards; }
+  @keyframes introIn { from { opacity: 0; } }
+  @keyframes introOut { to { opacity: 0; visibility: hidden; } }
+  .heart {
+    width: 148px; height: auto; color: #d6452f;
+    filter: drop-shadow(0 12px 26px rgba(214,69,47,.35));
+    animation: beat 1.15s ease-in-out infinite;
+  }
+  @keyframes beat {
+    0%, 100% { transform: scale(1); }
+    14% { transform: scale(1.17); }
+    28% { transform: scale(1.02); }
+    42% { transform: scale(1.11); }
+    56% { transform: scale(1); }
+  }
+  .intro-greet { font-family: "Fraunces", serif; font-size: 32px; font-weight: 600; }
+  .intro-sub { color: var(--muted); font-size: 14px; letter-spacing: .4px; }
+  .photo-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
 </style>
 </head>
 <body>
 <div class="app">
 
   <div id="loading">Loading…</div>
+
+  <!-- Intro / love screen — drop photos into .photo-strip later -->
+  <div id="intro" class="intro hidden">
+    <svg class="heart" viewBox="0 0 32 29.6" fill="currentColor" aria-hidden="true">
+      <path d="M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4c0,9.4,9.5,11.9,16,21.2c6.1-9.3,16-12.1,16-21.2C32,3.8,28.2,0,23.6,0z"/>
+    </svg>
+    <div class="intro-greet" id="introGreet"></div>
+    <div class="intro-sub">made with love</div>
+    <div class="photo-strip" id="photoStrip"><!-- photos go here later --></div>
+  </div>
 
   <!-- Sign in -->
   <div id="signin" class="signin hidden">
@@ -245,6 +309,16 @@
   }
   const firstName = (u) => (u.displayName || u.email || "?").split(/[ @]/)[0];
 
+  const STORES = ["Costco", "Food Basics", "Farm Boy"];
+  const STORE_COLOR = { "Costco": "#2f6db0", "Food Basics": "#c75d3c", "Farm Boy": "#4f8f4a" };
+  const nextStore = (s) => {
+    const i = STORES.indexOf(s);
+    return i === -1 ? STORES[0] : (i === STORES.length - 1 ? "" : STORES[i + 1]);
+  };
+  const checkSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>`;
+  const trashSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>`;
+  const saveSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
+
   /* ---------- Auth (Google Identity Services — works on iPhone) ---------- */
   async function handleCredential(response) {
     try {
@@ -280,14 +354,30 @@
       av.textContent = firstName(user)[0].toUpperCase();
       av.style.background = colorFor(user.uid);
       startSync();
-      setTimeout(() => $("addInput").focus(), 200);
+      showIntro();
     } else {
       me = null;
       if (unsub) { unsub(); unsub = null; }
       $("main").classList.add("hidden");
+      $("intro").classList.add("hidden");
       $("signin").classList.remove("hidden");
     }
   });
+
+  function showIntro() {
+    const intro = $("intro");
+    $("introGreet").textContent = "Hi " + firstName(me);
+    intro.classList.remove("hidden", "fade-out");
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      intro.classList.add("fade-out");
+      setTimeout(() => intro.classList.add("hidden"), 600);
+    };
+    const timer = setTimeout(finish, 2200);   // auto-advances after ~2.2s
+    intro.onclick = () => { clearTimeout(timer); finish(); }; // or tap to skip
+  }
 
   /* ---------- Live data ---------- */
   function startSync() {
@@ -306,57 +396,144 @@
   function render() {
     const groc = allItems.filter((i) => i.list === "groceries");
     const task = allItems.filter((i) => i.list === "tasks");
-    $("count-groceries").textContent = groc.filter((i) => !i.done).length;
+    $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
     $("count-tasks").textContent = task.filter((i) => !i.done).length;
 
-    const items = (currentList === "groceries" ? groc : task)
-      .slice()
-      .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)); // open first, done sink
-
     const list = $("list");
-    if (items.length === 0) {
-      list.innerHTML = `<div class="empty"><div class="em-mark">${currentList === "groceries" ? "🧺" : "🌿"}</div>Nothing here yet.<br>Add the first item below.</div>`;
+    list.innerHTML = "";
+
+    if (currentList === "tasks") { renderTasks(task, list); return; }
+
+    // ----- Groceries -----
+    const live = groc.filter((i) => !i.archived)
+      .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)); // open first, bought sink
+    const suggestions = groc.filter((i) => i.archived)
+      .sort((a, b) => (a.text || "").localeCompare(b.text || ""));
+
+    if (live.length === 0 && suggestions.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="em-mark">🧺</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
     }
 
-    list.innerHTML = "";
-    let shownClear = false;
-    for (const it of items) {
-      const el = document.createElement("div");
-      el.className = "item" + (it.done ? " done" : "");
-      el.innerHTML = `
-        <button class="check" aria-label="Toggle">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
-        </button>
-        <div class="body">
-          <div class="text"></div>
-          <div class="meta"><span class="dot"></span><span class="byname"></span></div>
-        </div>
-        <button class="del" aria-label="Delete">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-        </button>`;
-      el.querySelector(".text").textContent = it.text;
-      el.querySelector(".byname").textContent = it.addedBy || "";
-      el.querySelector(".dot").style.background = colorFor(it.uid);
-      el.querySelector(".check").onclick = () => updateDoc(doc(db, "items", it.id), { done: !it.done });
-      el.querySelector(".del").onclick = () => deleteDoc(doc(db, "items", it.id));
-      list.appendChild(el);
-      shownClear = shownClear || it.done;
+    let anyBought = false;
+    for (const it of live) { list.appendChild(groceryRow(it)); anyBought = anyBought || it.done; }
+
+    if (live.length === 0) {
+      const note = document.createElement("div");
+      note.className = "empty"; note.style.padding = "26px 20px";
+      note.innerHTML = `List's all clear 🎉<br><span style="font-size:13px">Tap a “buy again” item below to start the next trip.</span>`;
+      list.appendChild(note);
     }
 
-    if (shownClear) {
+    if (anyBought) {
+      const btn = document.createElement("button");
+      btn.className = "clear-done";
+      btn.textContent = "Save bought items for next time ↓";
+      btn.onclick = saveBought;
+      list.appendChild(btn);
+    }
+
+    if (suggestions.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "suggest";
+      wrap.innerHTML = `<div class="suggest-h">Buy again</div><div class="chips"></div>`;
+      const chips = wrap.querySelector(".chips");
+      for (const it of suggestions) chips.appendChild(suggestionChip(it));
+      list.appendChild(wrap);
+    }
+  }
+
+  function renderTasks(task, list) {
+    const arr = task.slice().sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
+    if (arr.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
+      return;
+    }
+    let anyDone = false;
+    for (const it of arr) { list.appendChild(taskRow(it)); anyDone = anyDone || it.done; }
+    if (anyDone) {
       const btn = document.createElement("button");
       btn.className = "clear-done";
       btn.textContent = "Clear completed";
-      btn.onclick = clearDone;
+      btn.onclick = () => deleteMany(task.filter((i) => i.done));
       list.appendChild(btn);
     }
   }
 
-  async function clearDone() {
+  function baseRow(it) {
+    const el = document.createElement("div");
+    el.className = "item" + (it.done ? " done" : "");
+    el.innerHTML = `
+      <button class="check" aria-label="Toggle">${checkSVG}</button>
+      <div class="body">
+        <div class="text"></div>
+        <div class="meta"><span class="dot"></span><span class="byname"></span></div>
+      </div>
+      <div class="row-actions"></div>`;
+    el.querySelector(".text").textContent = it.text;
+    el.querySelector(".byname").textContent = it.addedBy || "";
+    el.querySelector(".dot").style.background = colorFor(it.uid);
+    el.querySelector(".check").onclick = () => updateDoc(doc(db, "items", it.id), { done: !it.done });
+    return el;
+  }
+
+  function delButton(it) {
+    const b = document.createElement("button");
+    b.className = "del"; b.setAttribute("aria-label", "Delete forever");
+    b.innerHTML = trashSVG;
+    b.onclick = () => deleteDoc(doc(db, "items", it.id));
+    return b;
+  }
+
+  function taskRow(it) {
+    const el = baseRow(it);
+    el.querySelector(".row-actions").appendChild(delButton(it));
+    return el;
+  }
+
+  function groceryRow(it) {
+    const el = baseRow(it);
+    const actions = el.querySelector(".row-actions");
+    const store = it.store || "";
+    if (!it.done) {
+      const chip = document.createElement("button");
+      chip.className = "store-chip" + (store ? "" : " empty");
+      chip.textContent = store || "+ store";
+      if (store) { chip.style.background = STORE_COLOR[store]; chip.style.color = "#fff"; chip.style.borderColor = "transparent"; }
+      chip.onclick = () => updateDoc(doc(db, "items", it.id), { store: nextStore(store) });
+      actions.appendChild(chip);
+    } else {
+      const save = document.createElement("button");
+      save.className = "act save"; save.setAttribute("aria-label", "Save for next time");
+      save.innerHTML = saveSVG;
+      save.onclick = () => updateDoc(doc(db, "items", it.id), { archived: true, done: false });
+      actions.appendChild(save);
+    }
+    actions.appendChild(delButton(it));
+    return el;
+  }
+
+  function suggestionChip(it) {
+    const c = document.createElement("button");
+    c.className = "schip";
+    c.innerHTML = `<span class="sdot"></span><span class="stext"></span><span class="sx" aria-label="Remove">×</span>`;
+    c.querySelector(".stext").textContent = it.text;
+    c.querySelector(".sdot").style.background = it.store ? STORE_COLOR[it.store] : "var(--line)";
+    c.onclick = () => updateDoc(doc(db, "items", it.id), { archived: false, done: false, createdAt: serverTimestamp() });
+    c.querySelector(".sx").onclick = (e) => { e.stopPropagation(); deleteDoc(doc(db, "items", it.id)); };
+    return c;
+  }
+
+  async function saveBought() {
     const batch = writeBatch(db);
-    allItems.filter((i) => i.list === currentList && i.done)
-            .forEach((i) => batch.delete(doc(db, "items", i.id)));
+    allItems.filter((i) => i.list === "groceries" && i.done && !i.archived)
+            .forEach((i) => batch.update(doc(db, "items", i.id), { archived: true, done: false }));
+    await batch.commit();
+  }
+
+  async function deleteMany(items) {
+    const batch = writeBatch(db);
+    items.forEach((i) => batch.delete(doc(db, "items", i.id)));
     await batch.commit();
   }
 
@@ -368,7 +545,7 @@
     input.value = "";
     input.focus(); // keep keyboard up for rapid entry
     await addDoc(itemsCol, {
-      text, list: currentList, done: false,
+      text, list: currentList, done: false, archived: false, store: "",
       addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp()
     });
   }
