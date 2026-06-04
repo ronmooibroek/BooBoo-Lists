@@ -67,6 +67,7 @@
   .avatar {
     width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
     color: #fff; font-weight: 600; font-size: 14px; flex-shrink: 0;
+    background-size: cover; background-position: center; cursor: pointer;
   }
   .signout {
     background: none; border: none; color: var(--muted); font-family: inherit;
@@ -233,6 +234,19 @@
   .m-due.overdue { color: #c0392b; font-weight: 600; }
   .m-rep { color: var(--muted); }
 
+  .avt {
+    width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+    background-size: cover; background-position: center; overflow: hidden;
+    display: inline-grid; place-items: center; color: #fff; font-size: 10px; font-weight: 700;
+  }
+  .avt.big { width: 46px; height: 46px; font-size: 18px; }
+  .profile-row { display: flex; align-items: center; gap: 13px; }
+  .profile-name { flex: 1; font-size: 16px; font-weight: 500; }
+  .profile-btn {
+    background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px;
+    padding: 8px 15px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer;
+  }
+
   .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty .em-mark { font-size: 40px; margin-bottom: 8px; }
   .clear-done {
@@ -348,6 +362,7 @@
   </div>
 
   <!-- Long-press action sheet -->
+  <input type="file" id="photoInput" accept="image/*" style="display:none" />
   <div id="sheet" class="sheet-backdrop hidden">
     <div class="sheet">
       <div class="sheet-title" id="sheetTitle"></div>
@@ -394,6 +409,8 @@
   let currentList = "groceries";
   let storeFilter = null;
   let allItems = [];
+  let profiles = {};
+  let pendingPhotoPerson = null;
   let unsub = null;
   let me = null;
 
@@ -431,8 +448,55 @@
   function knownPeople() {
     const map = new Map();
     if (me) map.set(me.uid, firstName(me));
-    for (const it of allItems) if (it.uid) map.set(it.uid, it.addedBy || "?");
+    for (const it of allItems) {
+      if (!it.uid) continue;
+      if (it.kind === "profile") { if (!map.has(it.uid) && it.name) map.set(it.uid, it.name); continue; }
+      if (it.addedBy) map.set(it.uid, it.addedBy);
+    }
     return [...map.entries()].map(([uid, name]) => ({ uid, name }));
+  }
+
+  function photoFor(uid) { return uid ? (profiles[uid] || "") : ""; }
+  function rebuildProfiles() {
+    profiles = {};
+    for (const it of allItems) if (it.kind === "profile" && it.uid && it.photo) profiles[it.uid] = it.photo;
+  }
+  function avatarEl(uid, name, cls) {
+    const el = document.createElement("span");
+    el.className = "avt" + (cls ? " " + cls : "");
+    const ph = photoFor(uid);
+    if (ph) { el.style.backgroundImage = `url("${ph}")`; }
+    else { el.classList.add("init"); el.style.background = uid ? colorFor(uid) : "var(--line)"; el.textContent = (name || "?")[0].toUpperCase(); }
+    return el;
+  }
+  function fileToAvatar(file, size, cb) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = size; c.height = size;
+        const ctx = c.getContext("2d");
+        const scale = Math.max(size / img.width, size / img.height); // cover crop
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+        cb(c.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  async function setProfilePhoto(person, dataUrl) {
+    const existing = allItems.find((i) => i.kind === "profile" && i.uid === person.uid);
+    if (existing) await updateDoc(doc(db, "items", existing.id), { photo: dataUrl, name: person.name });
+    else await addDoc(itemsCol, { kind: "profile", uid: person.uid, name: person.name, photo: dataUrl, createdAt: serverTimestamp() });
+  }
+  function updateHeaderAvatar() {
+    if (!me) return;
+    const av = $("avatar");
+    const ph = photoFor(me.uid);
+    if (ph) { av.style.backgroundImage = `url("${ph}")`; av.textContent = ""; av.style.backgroundColor = "transparent"; }
+    else { av.style.backgroundImage = "none"; av.textContent = firstName(me)[0].toUpperCase(); av.style.background = colorFor(me.uid); }
   }
 
   const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
@@ -505,9 +569,8 @@
       me = user;
       $("signin").classList.add("hidden");
       $("main").classList.remove("hidden");
-      const av = $("avatar");
-      av.textContent = firstName(user)[0].toUpperCase();
-      av.style.background = colorFor(user.uid);
+      $("avatar").onclick = openProfilesSheet;
+      updateHeaderAvatar();
       startSync();
       showIntro();
     } else {
@@ -540,6 +603,8 @@
     const q = query(itemsCol, orderBy("createdAt", "asc"));
     unsub = onSnapshot(q, (snap) => {
       allItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rebuildProfiles();
+      updateHeaderAvatar();
       render();
     }, (err) => {
       console.error(err);
@@ -681,6 +746,42 @@
   $("sheetCancel").onclick = closeSheet;
   $("sheet").addEventListener("click", (e) => {
     if (e.target.id === "sheet" && Date.now() - sheetOpenedAt > 350) closeSheet();
+  });
+
+  function openProfilesSheet() {
+    $("sheetTitle").textContent = "Profile photos";
+    const acts = $("sheetActions");
+    acts.innerHTML = "";
+    const people = knownPeople();
+    if (!people.length) acts.innerHTML = `<div class="rep-off">No people yet — once you and Kate have both signed in, you can set photos here.</div>`;
+    for (const p of people) {
+      const row = document.createElement("div");
+      row.className = "sheet-section profile-row";
+      row.appendChild(avatarEl(p.uid, p.name, "big"));
+      const n = document.createElement("span"); n.className = "profile-name"; n.textContent = p.name;
+      row.appendChild(n);
+      const btn = document.createElement("button");
+      btn.className = "profile-btn";
+      btn.textContent = photoFor(p.uid) ? "Change" : "Choose photo";
+      btn.onclick = () => { pendingPhotoPerson = p; $("photoInput").click(); };
+      row.appendChild(btn);
+      acts.appendChild(row);
+    }
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
+
+  $("photoInput").addEventListener("change", () => {
+    const file = $("photoInput").files[0];
+    if (!file || !pendingPhotoPerson) return;
+    const person = pendingPhotoPerson;
+    fileToAvatar(file, 160, async (dataUrl) => {
+      await setProfilePhoto(person, dataUrl);
+      profiles[person.uid] = dataUrl;
+      updateHeaderAvatar();
+      openProfilesSheet();
+    });
+    $("photoInput").value = "";
   });
 
   function openStoreSheet(store) {
@@ -840,9 +941,9 @@
 
     if (it.assignee) {
       const a = document.createElement("span"); a.className = "m-assignee";
-      a.innerHTML = `<span class="dot"></span><span class="an"></span>`;
-      a.querySelector(".dot").style.background = colorFor(it.assigneeUid || "");
-      a.querySelector(".an").textContent = it.assignee;
+      a.appendChild(avatarEl(it.assigneeUid || "", it.assignee));
+      const n = document.createElement("span"); n.className = "an"; n.textContent = it.assignee;
+      a.appendChild(n);
       meta.appendChild(a);
     }
     if (it.due) {
