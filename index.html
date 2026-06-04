@@ -264,6 +264,38 @@
   }
   .recipe-add-btn:disabled { background: var(--line); color: var(--muted); cursor: default; }
   .recipe-add-btn:not(:disabled):active { background: var(--accent-dark); }
+
+  /* Recipe detail / cookbook */
+  .recipe-actions { display: flex; gap: 10px; margin: 0 0 14px; }
+  .recipe-serves { color: var(--muted); font-size: 14px; margin: -4px 2px 14px; }
+  .rc-section-h { font-family: "Fraunces", serif; font-size: 19px; font-weight: 600; margin: 18px 2px 8px; }
+  .step-row { display: flex; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+  .step-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+  .step-text { line-height: 1.45; }
+  .rc-btn { flex: 1; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 13px; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; }
+  .rc-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .rc-btn.primary:active { background: var(--accent-dark); }
+
+  /* Import overlay */
+  .overlay { position: fixed; inset: 0; z-index: 60; background: rgba(46,42,37,.4); display: flex; align-items: flex-end; justify-content: center; animation: fadeIn .2s ease; }
+  .overlay-card { width: 100%; max-width: 600px; background: var(--surface); border-radius: 22px 22px 0 0; padding: 20px 18px; padding-bottom: max(16px, env(safe-area-inset-bottom)); box-shadow: 0 -8px 40px rgba(46,42,37,.22); animation: sheetUp .25s cubic-bezier(.2,.8,.2,1); max-height: 92vh; overflow-y: auto; }
+  .overlay-title { font-family: "Fraunces", serif; font-size: 22px; font-weight: 600; }
+  .overlay-sub { color: var(--muted); font-size: 14px; margin: 6px 0 12px; line-height: 1.4; }
+  .import-text { width: 100%; min-height: 170px; resize: vertical; font-family: inherit; font-size: 15px; line-height: 1.4; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--bg); color: var(--ink); }
+  .import-status { font-size: 13px; color: var(--muted); min-height: 18px; margin-top: 8px; }
+  .overlay-btns { display: flex; gap: 10px; margin-top: 12px; }
+  .overlay-cancel { width: 100%; background: none; border: none; color: var(--muted); font-family: inherit; font-size: 15px; font-weight: 600; padding: 14px; cursor: pointer; margin-top: 4px; }
+
+  /* Cooking mode */
+  .cook { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 24px; text-align: center; }
+  .cook-close { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px; background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; }
+  .cook-title { font-family: "Fraunces", serif; font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .cook-counter { color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 26px; }
+  .cook-step { font-size: 26px; line-height: 1.4; max-width: 520px; }
+  .cook-nav { display: flex; gap: 12px; margin-top: 36px; width: 100%; max-width: 420px; }
+  .cook-btn { flex: 1; padding: 16px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); font-family: inherit; font-size: 16px; font-weight: 600; color: var(--ink); cursor: pointer; }
+  .cook-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .cook-btn:disabled { opacity: .4; cursor: default; }
   .taskline { display: flex; align-items: center; gap: 10px; }
   .taskline .ttext { flex: 1; min-width: 0; word-break: break-word; }
   .inline-av { margin-left: auto; }
@@ -421,6 +453,34 @@
       <button class="sheet-cancel" id="sheetCancel">Cancel</button>
     </div>
   </div>
+
+  <!-- Import recipe overlay -->
+  <input type="file" id="ocrInput" accept="image/*" style="display:none" />
+  <div id="import" class="overlay hidden">
+    <div class="overlay-card">
+      <div class="overlay-title">Add a recipe</div>
+      <p class="overlay-sub">Paste a recipe, or scan a photo. The app pulls out the ingredients and steps — you can tidy them after saving.</p>
+      <textarea id="importText" class="import-text" placeholder="Paste the full recipe here…"></textarea>
+      <div id="importStatus" class="import-status"></div>
+      <div class="overlay-btns">
+        <button id="scanBtn" class="rc-btn">Scan a photo</button>
+        <button id="parseBtn" class="rc-btn primary">Parse &amp; save</button>
+      </div>
+      <button id="importCancel" class="overlay-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Cooking mode -->
+  <div id="cook" class="cook hidden">
+    <button id="cookClose" class="cook-close" aria-label="Exit">✕</button>
+    <div class="cook-title" id="cookTitle"></div>
+    <div class="cook-counter" id="cookCounter"></div>
+    <div class="cook-step" id="cookStep"></div>
+    <div class="cook-nav">
+      <button id="cookPrev" class="cook-btn">Back</button>
+      <button id="cookNext" class="cook-btn primary">Next</button>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -462,6 +522,10 @@
   let upcomingOpen = true;
   let openRecipeId = null;
   let selectedIng = new Set();
+  let importTarget = null;
+  let cookSteps = [];
+  let cookIdx = 0;
+  let wakeLock = null;
   let allItems = [];
   let profiles = {};
   let pendingPhoto = null;
@@ -803,9 +867,19 @@
       renderRecipeDetail(r, list);
       return;
     }
+    const imp = document.createElement("button");
+    imp.className = "rc-btn primary";
+    imp.style.width = "100%"; imp.style.margin = "2px 0 14px";
+    imp.textContent = "⤵ Paste or scan a recipe";
+    imp.onclick = () => openImport(null);
+    list.appendChild(imp);
+
     const recipes = allItems.filter((i) => i.list === "recipes").sort((a, b) => (a.text || "").localeCompare(b.text || ""));
     if (recipes.length === 0) {
-      list.innerHTML = `<div class="empty"><div class="em-mark">🍳</div>No recipes yet.<br>Add one below, then open it to add ingredients.</div>`;
+      const e = document.createElement("div");
+      e.className = "empty";
+      e.innerHTML = `<div class="em-mark">🍳</div>No recipes yet.<br>Paste one above, or type a name below.`;
+      list.appendChild(e);
       return;
     }
     for (const r of recipes) {
@@ -823,6 +897,8 @@
 
   function renderRecipeDetail(r, list) {
     const ings = r.ingredients || [];
+    const steps = r.steps || [];
+
     const head = document.createElement("div");
     head.className = "recipe-head";
     head.innerHTML = `<button class="back-btn">‹ Recipes</button><div class="recipe-title"></div>`;
@@ -830,13 +906,36 @@
     head.querySelector(".back-btn").onclick = () => { openRecipeId = null; render(); };
     list.appendChild(head);
 
-    if (ings.length === 0) {
-      const e = document.createElement("div");
-      e.className = "empty"; e.style.padding = "30px 20px";
-      e.innerHTML = `No ingredients yet.<br><span style="font-size:13px">Add them below.</span>`;
-      list.appendChild(e);
+    const actions = document.createElement("div");
+    actions.className = "recipe-actions";
+    const importBtn = document.createElement("button");
+    importBtn.className = "rc-btn";
+    importBtn.textContent = "⤵ Paste / scan";
+    importBtn.onclick = () => openImport(r.id);
+    actions.appendChild(importBtn);
+    if (steps.length) {
+      const cookBtn = document.createElement("button");
+      cookBtn.className = "rc-btn primary";
+      cookBtn.textContent = "▶ Cook";
+      cookBtn.onclick = () => openCook(r);
+      actions.appendChild(cookBtn);
+    }
+    list.appendChild(actions);
+
+    if (r.servings) {
+      const sv = document.createElement("div");
+      sv.className = "recipe-serves";
+      sv.textContent = "Serves " + r.servings;
+      list.appendChild(sv);
     }
 
+    const ih = document.createElement("div"); ih.className = "rc-section-h"; ih.textContent = "Ingredients";
+    list.appendChild(ih);
+    if (ings.length === 0) {
+      const e = document.createElement("div"); e.className = "empty"; e.style.padding = "14px";
+      e.textContent = "No ingredients yet — add one below or paste a recipe.";
+      list.appendChild(e);
+    }
     for (const ing of ings) {
       const el = document.createElement("div");
       el.className = "item ing-row" + (selectedIng.has(ing) ? " sel" : "");
@@ -846,7 +945,6 @@
       attachLongPress(el, () => openIngredientSheet(r, ing));
       list.appendChild(el);
     }
-
     if (ings.length) {
       const btn = document.createElement("button");
       btn.className = "recipe-add-btn";
@@ -855,6 +953,20 @@
       btn.disabled = !n;
       btn.onclick = () => addSelectedToGroceries(r);
       list.appendChild(btn);
+    }
+
+    if (steps.length) {
+      const mh = document.createElement("div"); mh.className = "rc-section-h"; mh.textContent = "Method";
+      list.appendChild(mh);
+      steps.forEach((s, idx) => {
+        const row = document.createElement("div");
+        row.className = "step-row";
+        row.innerHTML = `<span class="step-num"></span><span class="step-text"></span>`;
+        row.querySelector(".step-num").textContent = idx + 1;
+        row.querySelector(".step-text").textContent = s;
+        attachLongPress(row, () => openStepSheet(r, idx));
+        list.appendChild(row);
+      });
     }
   }
 
@@ -901,6 +1013,112 @@
     acts.appendChild(del);
     sheetOpenedAt = Date.now();
     $("sheet").classList.remove("hidden");
+  }
+
+  function openStepSheet(r, idx) {
+    $("sheetTitle").textContent = "Step " + (idx + 1);
+    const acts = $("sheetActions"); acts.innerHTML = "";
+    const del = document.createElement("button");
+    del.className = "sheet-act danger";
+    del.innerHTML = trashSVG + "<span>Remove step</span>";
+    del.onclick = () => { const next = (r.steps || []).slice(); next.splice(idx, 1); updateDoc(doc(db, "items", r.id), { steps: next }); closeSheet(); };
+    acts.appendChild(del);
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
+
+  function parseRecipe(text) {
+    const lines = text.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter((l) => l.length);
+    let title = lines[0] || "Recipe";
+    let servings = "";
+    const sv = text.match(/\b(?:serves|serving|yield|yields|makes)\b[:\s]*([0-9]+(?:\s*(?:-|–|to)\s*[0-9]+)?)/i);
+    if (sv) servings = sv[1].replace(/\s+/g, " ");
+    const isIngHdr = (l) => /^ingredients?\b/i.test(l) && l.length < 28;
+    const isStepHdr = (l) => /^(directions?|method|instructions?|steps?|preparation)\b/i.test(l) && l.length < 28;
+    let ingStart = -1, stepStart = -1;
+    lines.forEach((l, idx) => {
+      if (ingStart === -1 && isIngHdr(l)) ingStart = idx;
+      else if (ingStart !== -1 && stepStart === -1 && isStepHdr(l)) stepStart = idx;
+    });
+    let ingredients = [], steps = [];
+    if (ingStart !== -1) {
+      const before = lines.slice(0, ingStart);
+      if (before.length) title = before[0];
+      const ingEnd = stepStart > ingStart ? stepStart : lines.length;
+      ingredients = lines.slice(ingStart + 1, ingEnd);
+      if (stepStart !== -1) steps = lines.slice(stepStart + 1);
+    } else {
+      const unit = /\b(cups?|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|oz|ounces?|lb|pounds?|ml|l|litres?|liters?|cloves?|pinch|cans?|pkg|packages?|slices?|sticks?)\b/i;
+      for (const l of lines.slice(1)) {
+        const looksIng = (/^[\d¼½¾⅓⅔⅛⅜⅝⅞]/.test(l) || unit.test(l)) && l.length < 80;
+        if (looksIng) ingredients.push(l); else steps.push(l);
+      }
+    }
+    const strip = (s) => s.replace(/^\s*\d+[\.\)]\s*/, "").replace(/^[-•*▢]\s*/, "").trim();
+    ingredients = ingredients.map(strip).filter(Boolean);
+    steps = steps.map(strip).filter(Boolean);
+    if (isIngHdr(title) || isStepHdr(title)) title = "Recipe";
+    return { title: title.slice(0, 80), servings, ingredients, steps };
+  }
+
+  function loadScript(src) {
+    return new Promise((res, rej) => { const s = document.createElement("script"); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  }
+  async function runOCR(file) {
+    if (!window.Tesseract) await loadScript("https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js");
+    const { data } = await window.Tesseract.recognize(file, "eng");
+    return data.text || "";
+  }
+
+  function openImport(targetId) {
+    importTarget = targetId || null;
+    $("importText").value = "";
+    $("importStatus").textContent = "";
+    $("import").classList.remove("hidden");
+  }
+  function closeImport() { $("import").classList.add("hidden"); }
+  async function doParseSave() {
+    const text = $("importText").value.trim();
+    if (!text) { closeImport(); return; }
+    const r = parseRecipe(text);
+    if (importTarget) {
+      const existing = allItems.find((i) => i.id === importTarget);
+      const update = { ingredients: r.ingredients, steps: r.steps, servings: r.servings };
+      if (existing && !((existing.text || "").trim()) && r.title) update.text = r.title;
+      await updateDoc(doc(db, "items", importTarget), update);
+      openRecipeId = importTarget;
+    } else {
+      const ref = await addDoc(itemsCol, { text: r.title || "Recipe", list: "recipes", ingredients: r.ingredients, steps: r.steps, servings: r.servings, addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
+      openRecipeId = ref.id;
+    }
+    selectedIng = new Set();
+    closeImport();
+    currentList = "recipes";
+    render();
+  }
+
+  async function openCook(r) {
+    cookSteps = r.steps || [];
+    cookIdx = 0;
+    $("cookTitle").textContent = r.text;
+    renderCook();
+    $("cook").classList.remove("hidden");
+    try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+  function renderCook() {
+    $("cookStep").textContent = cookSteps[cookIdx] || "";
+    $("cookCounter").textContent = `Step ${cookIdx + 1} of ${cookSteps.length}`;
+    $("cookPrev").disabled = cookIdx === 0;
+    $("cookNext").textContent = cookIdx >= cookSteps.length - 1 ? "Done" : "Next";
+  }
+  function cookNav(d) {
+    if (d > 0 && cookIdx >= cookSteps.length - 1) { closeCook(); return; }
+    cookIdx = Math.max(0, Math.min(cookSteps.length - 1, cookIdx + d));
+    renderCook();
+  }
+  function closeCook() {
+    $("cook").classList.add("hidden");
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
   }
 
   function rowShell(it) {
@@ -1011,6 +1229,27 @@
     if (!file || !p) return;
     fileToAvatar(file, p.size, (dataUrl) => p.done(dataUrl));
   });
+
+  $("parseBtn").onclick = doParseSave;
+  $("scanBtn").onclick = () => $("ocrInput").click();
+  $("importCancel").onclick = closeImport;
+  $("import").addEventListener("click", (e) => { if (e.target.id === "import") closeImport(); });
+  $("ocrInput").addEventListener("change", async () => {
+    const file = $("ocrInput").files[0];
+    $("ocrInput").value = "";
+    if (!file) return;
+    $("importStatus").textContent = "Scanning photo… this can take a moment.";
+    try {
+      const text = await runOCR(file);
+      $("importText").value = ($("importText").value ? $("importText").value + "\n" : "") + text;
+      $("importStatus").textContent = "Scanned. Review and fix the text, then Parse & save.";
+    } catch (e) {
+      $("importStatus").textContent = "Couldn't read that image — try pasting the text instead.";
+    }
+  });
+  $("cookPrev").onclick = () => cookNav(-1);
+  $("cookNext").onclick = () => cookNav(1);
+  $("cookClose").onclick = closeCook;
 
   function openStoreSheet(store) {
     $("sheetTitle").textContent = "Store: " + store;
