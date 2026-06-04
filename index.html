@@ -213,6 +213,20 @@
     width: 56px; font-family: inherit; font-size: 15px; padding: 8px; text-align: center;
     border: 1.5px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink);
   }
+  .rep-modes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 11px; }
+  .rep-mode {
+    font-family: inherit; font-size: 13px; cursor: pointer; background: var(--surface);
+    border: 1.5px solid var(--line); color: var(--ink); border-radius: 999px; padding: 7px 12px;
+  }
+  .rep-mode.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .rep-off { color: var(--muted); font-size: 14px; }
+  .weekday-row { display: flex; gap: 6px; }
+  .wd {
+    flex: 1; font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    background: var(--surface); border: 1.5px solid var(--line); color: var(--ink);
+    border-radius: 10px; padding: 9px 0;
+  }
+  .wd.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   .m-assignee { display: inline-flex; align-items: center; gap: 5px; }
   .m-due { color: var(--muted); }
@@ -419,6 +433,45 @@
     if (me) map.set(me.uid, firstName(me));
     for (const it of allItems) if (it.uid) map.set(it.uid, it.addedBy || "?");
     return [...map.entries()].map(([uid, name]) => ({ uid, name }));
+  }
+
+  const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  function nextWeekday(weekday, fromISO) {
+    const d = new Date(fromISO + "T00:00:00");
+    while (d.getDay() !== weekday) d.setDate(d.getDate() + 1);
+    return isoOf(d);
+  }
+  function nextDom(dom, fromISO) {
+    const d = new Date(fromISO + "T00:00:00");
+    for (let i = 0; i < 370; i++) {
+      const dim = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); // days in this month
+      if (d.getDate() === Math.min(dom, dim)) return isoOf(d);
+      d.setDate(d.getDate() + 1);
+    }
+    return isoOf(d);
+  }
+  const WD_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  function ordinal(n) { const s = ["th","st","nd","rd"], v = n % 100; return n + (s[(v-20)%10] || s[v] || s[0]); }
+  function isRepeating(it) {
+    const t = it.repeatType || (it.repeatDays > 0 ? "interval" : "");
+    if (t === "interval") return it.repeatDays > 0;
+    if (t === "weekly") return Number.isInteger(it.repeatWeekday);
+    if (t === "monthly") return it.repeatDom >= 1;
+    return false;
+  }
+  function nextDue(it, fromISO) {
+    const t = it.repeatType || (it.repeatDays > 0 ? "interval" : "");
+    if (t === "interval") return addDays(fromISO, it.repeatDays || 1);
+    if (t === "weekly") return nextWeekday(it.repeatWeekday || 0, fromISO);
+    if (t === "monthly") return nextDom(it.repeatDom || 1, fromISO);
+    return "";
+  }
+  function repeatLabel(it) {
+    const t = it.repeatType || (it.repeatDays > 0 ? "interval" : "");
+    if (t === "interval" && it.repeatDays > 0) return "↻ " + it.repeatDays + "d";
+    if (t === "weekly" && Number.isInteger(it.repeatWeekday)) return "↻ " + WD_SHORT[it.repeatWeekday];
+    if (t === "monthly" && it.repeatDom >= 1) return "↻ " + ordinal(it.repeatDom);
+    return "";
   }
 
   /* ---------- Auth (Google Identity Services — works on iPhone) ---------- */
@@ -697,13 +750,74 @@
 
     // Repeat
     const rWrap = document.createElement("div"); rWrap.className = "sheet-section";
-    rWrap.innerHTML = `<div class="sheet-label">Repeat</div><div class="repeat-row">Reappears <input type="number" min="1" inputmode="numeric" class="rep-input"> days after I check it off</div>`;
-    const rInput = rWrap.querySelector(".rep-input");
-    if (it.repeatDays) rInput.value = it.repeatDays;
-    rInput.onchange = () => {
-      const n = parseInt(rInput.value, 10);
-      updateDoc(doc(db, "items", it.id), { repeatDays: n > 0 ? n : 0 });
-    };
+    rWrap.innerHTML = `<div class="sheet-label">Repeat</div><div class="rep-modes"></div><div class="rep-detail"></div>`;
+    const modesEl = rWrap.querySelector(".rep-modes");
+    const detailEl = rWrap.querySelector(".rep-detail");
+    let selType = it.repeatType || (it.repeatDays > 0 ? "interval" : "");
+
+    function renderRepeatDetail(type) {
+      detailEl.innerHTML = "";
+      if (type === "interval") {
+        const row = document.createElement("div"); row.className = "repeat-row";
+        row.innerHTML = `Reappears <input type="number" min="1" inputmode="numeric" class="rep-input"> days after I check it off`;
+        const inp = row.querySelector(".rep-input");
+        if (it.repeatDays) inp.value = it.repeatDays;
+        inp.onchange = () => {
+          const n = parseInt(inp.value, 10);
+          it.repeatDays = n > 0 ? n : 0; it.repeatType = "interval";
+          updateDoc(doc(db, "items", it.id), { repeatType: "interval", repeatDays: n > 0 ? n : 0 });
+        };
+        detailEl.appendChild(row);
+      } else if (type === "weekly") {
+        const row = document.createElement("div"); row.className = "weekday-row";
+        ["Su","Mo","Tu","We","Th","Fr","Sa"].forEach((nm, w) => {
+          const b = document.createElement("button");
+          b.className = "wd" + (it.repeatWeekday === w ? " on" : "");
+          b.textContent = nm;
+          b.onclick = () => {
+            it.repeatWeekday = w; it.repeatType = "weekly";
+            row.querySelectorAll(".wd").forEach((x) => x.classList.remove("on"));
+            b.classList.add("on");
+            updateDoc(doc(db, "items", it.id), { repeatType: "weekly", repeatWeekday: w, repeatDays: 0, due: nextWeekday(w, todayISO()) });
+          };
+          row.appendChild(b);
+        });
+        detailEl.appendChild(row);
+      } else if (type === "monthly") {
+        const row = document.createElement("div"); row.className = "repeat-row";
+        row.innerHTML = `On day <input type="number" min="1" max="31" inputmode="numeric" class="rep-input"> of each month`;
+        const inp = row.querySelector(".rep-input");
+        if (it.repeatDom) inp.value = it.repeatDom;
+        inp.onchange = () => {
+          let n = parseInt(inp.value, 10);
+          if (!(n >= 1)) return;
+          n = Math.min(31, n);
+          it.repeatDom = n; it.repeatType = "monthly";
+          updateDoc(doc(db, "items", it.id), { repeatType: "monthly", repeatDom: n, repeatDays: 0, due: nextDom(n, todayISO()) });
+        };
+        detailEl.appendChild(row);
+      } else {
+        detailEl.innerHTML = `<div class="rep-off">Doesn't repeat.</div>`;
+      }
+    }
+
+    [["", "Off"], ["interval", "Every N days"], ["weekly", "Weekly"], ["monthly", "Monthly"]].forEach(([val, label]) => {
+      const b = document.createElement("button");
+      b.className = "rep-mode" + (val === selType ? " on" : "");
+      b.textContent = label;
+      b.onclick = () => {
+        selType = val;
+        modesEl.querySelectorAll(".rep-mode").forEach((x) => x.classList.remove("on"));
+        b.classList.add("on");
+        if (val === "") {
+          it.repeatType = ""; it.repeatDays = 0;
+          updateDoc(doc(db, "items", it.id), { repeatType: "", repeatDays: 0, hiddenUntil: "" });
+        }
+        renderRepeatDetail(val);
+      };
+      modesEl.appendChild(b);
+    });
+    renderRepeatDetail(selType);
     acts.appendChild(rWrap);
 
     // Delete
@@ -737,18 +851,18 @@
       d.textContent = dueLabel(it.due);
       meta.appendChild(d);
     }
-    if (it.repeatDays > 0) {
-      const r = document.createElement("span");
-      r.className = "m-rep";
-      r.textContent = "↻ " + it.repeatDays + "d";
-      meta.appendChild(r);
+    if (it.repeatDays > 0 || it.repeatType) {
+      const rl = repeatLabel(it);
+      if (rl) { const r = document.createElement("span"); r.className = "m-rep"; r.textContent = rl; meta.appendChild(r); }
     }
     if (!meta.children.length) meta.remove();
 
     // Repeating tasks reschedule on check-off instead of staying done
-    if (it.repeatDays > 0 && !it.done) {
+    if (isRepeating(it) && !it.done) {
       el.querySelector(".check").onclick = () => {
-        const next = addDays(todayISO(), it.repeatDays);
+        const t = it.repeatType || "interval";
+        const base = (t === "interval") ? todayISO() : addDays(todayISO(), 1);
+        const next = nextDue(it, base);
         updateDoc(doc(db, "items", it.id), { hiddenUntil: next, due: next });
       };
     }
