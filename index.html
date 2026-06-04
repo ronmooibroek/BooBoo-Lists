@@ -269,9 +269,15 @@
   .recipe-actions { display: flex; gap: 10px; margin: 0 0 14px; }
   .recipe-serves { color: var(--muted); font-size: 14px; margin: -4px 2px 14px; }
   .rc-section-h { font-family: "Fraunces", serif; font-size: 19px; font-weight: 600; margin: 18px 2px 8px; }
-  .step-row { display: flex; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+  .step-row { display: flex; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
   .step-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
   .step-text { line-height: 1.45; }
+  .recipe-cover { display: block; width: 100%; max-height: 240px; object-fit: cover; border-radius: 16px; margin: 0 0 14px; cursor: pointer; }
+  .step-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; }
+  .step-img { width: 100%; max-width: 240px; border-radius: 12px; object-fit: cover; }
+  .cook-photo { width: 100%; max-width: 360px; max-height: 40vh; object-fit: cover; border-radius: 16px; margin-bottom: 20px; }
+  .step-edit { width: 100%; font-family: inherit; font-size: 16px; line-height: 1.45; border: 1.5px solid var(--accent); border-radius: 10px; padding: 9px 11px; background: var(--surface); color: var(--ink); resize: none; outline: none; }
+  .add-step { color: var(--accent); font-weight: 600; font-size: 15px; padding: 12px 4px; cursor: pointer; }
   .rc-btn { flex: 1; background: var(--surface); border: 1.5px solid var(--line); border-radius: 12px; padding: 13px; font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; }
   .rc-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .rc-btn.primary:active { background: var(--accent-dark); }
@@ -475,6 +481,7 @@
     <button id="cookClose" class="cook-close" aria-label="Exit">✕</button>
     <div class="cook-title" id="cookTitle"></div>
     <div class="cook-counter" id="cookCounter"></div>
+    <img id="cookPhoto" class="cook-photo" style="display:none" alt="" />
     <div class="cook-step" id="cookStep"></div>
     <div class="cook-nav">
       <button id="cookPrev" class="cook-btn">Back</button>
@@ -553,6 +560,8 @@
   const saveSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
   const filterSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>`;
   const cameraSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-2h8l2 2h3v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
+  const stepText = (s) => (typeof s === "string" ? s : (s && s.text) || "");
+  const stepPhoto = (s) => (typeof s === "string" ? "" : (s && s.photo) || "");
 
   const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -889,6 +898,7 @@
       el.querySelector(".text").textContent = r.text;
       const n = (r.ingredients || []).length;
       el.querySelector(".meta").textContent = n === 1 ? "1 ingredient" : n + " ingredients";
+      if (r.photo) { const t = document.createElement("span"); t.className = "gthumb"; t.style.backgroundImage = `url("${r.photo}")`; el.insertBefore(t, el.firstChild); }
       el.onclick = () => { openRecipeId = r.id; selectedIng = new Set(); render(); };
       attachLongPress(el, () => openRecipeSheet(r));
       list.appendChild(el);
@@ -906,6 +916,14 @@
     head.querySelector(".back-btn").onclick = () => { openRecipeId = null; render(); };
     list.appendChild(head);
 
+    if (r.photo) {
+      const cover = document.createElement("img");
+      cover.className = "recipe-cover";
+      cover.src = r.photo;
+      cover.onclick = () => openRecipePhotoSheet(r);
+      list.appendChild(cover);
+    }
+
     const actions = document.createElement("div");
     actions.className = "recipe-actions";
     const importBtn = document.createElement("button");
@@ -913,6 +931,13 @@
     importBtn.textContent = "⤵ Paste / scan";
     importBtn.onclick = () => openImport(r.id);
     actions.appendChild(importBtn);
+    if (!r.photo) {
+      const coverBtn = document.createElement("button");
+      coverBtn.className = "rc-btn";
+      coverBtn.textContent = "📷 Cover";
+      coverBtn.onclick = () => pickPhoto(520, (d) => updateDoc(doc(db, "items", r.id), { photo: d }));
+      actions.appendChild(coverBtn);
+    }
     if (steps.length) {
       const cookBtn = document.createElement("button");
       cookBtn.className = "rc-btn primary";
@@ -955,19 +980,25 @@
       list.appendChild(btn);
     }
 
-    if (steps.length) {
-      const mh = document.createElement("div"); mh.className = "rc-section-h"; mh.textContent = "Method";
-      list.appendChild(mh);
-      steps.forEach((s, idx) => {
-        const row = document.createElement("div");
-        row.className = "step-row";
-        row.innerHTML = `<span class="step-num"></span><span class="step-text"></span>`;
-        row.querySelector(".step-num").textContent = idx + 1;
-        row.querySelector(".step-text").textContent = s;
-        attachLongPress(row, () => openStepSheet(r, idx));
-        list.appendChild(row);
-      });
-    }
+    const mh = document.createElement("div"); mh.className = "rc-section-h"; mh.textContent = "Method";
+    list.appendChild(mh);
+    steps.forEach((s, idx) => {
+      const row = document.createElement("div");
+      row.className = "step-row";
+      row.innerHTML = `<span class="step-num"></span><div class="step-col"><div class="step-text"></div></div>`;
+      row.querySelector(".step-num").textContent = idx + 1;
+      row.querySelector(".step-text").textContent = stepText(s);
+      const sp = stepPhoto(s);
+      if (sp) { const im = document.createElement("img"); im.className = "step-img"; im.src = sp; row.querySelector(".step-col").appendChild(im); }
+      row.onclick = () => beginEditStep(row, r, idx, stepText(s));
+      attachLongPress(row, () => openStepSheet(r, idx));
+      list.appendChild(row);
+    });
+    const addRow = document.createElement("div");
+    addRow.className = "add-step";
+    addRow.textContent = "+ Add a step";
+    addRow.onclick = () => beginAddStep(addRow, r);
+    list.appendChild(addRow);
   }
 
   function toggleIng(ing) {
@@ -1016,15 +1047,107 @@
   }
 
   function openStepSheet(r, idx) {
+    const steps = r.steps || [];
     $("sheetTitle").textContent = "Step " + (idx + 1);
     const acts = $("sheetActions"); acts.innerHTML = "";
+    const mk = (label, fn) => {
+      const b = document.createElement("button");
+      b.className = "sheet-act";
+      b.innerHTML = `<span></span>`;
+      b.querySelector("span").textContent = label;
+      b.onclick = () => { fn(); closeSheet(); };
+      acts.appendChild(b);
+    };
+    if (idx > 0) mk("↑  Move up", () => { const n = steps.slice(); [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]]; updateDoc(doc(db, "items", r.id), { steps: n }); });
+    if (idx < steps.length - 1) mk("↓  Move down", () => { const n = steps.slice(); [n[idx + 1], n[idx]] = [n[idx], n[idx + 1]]; updateDoc(doc(db, "items", r.id), { steps: n }); });
+    const hasPhoto = !!stepPhoto(steps[idx]);
+    const photoBtn = document.createElement("button");
+    photoBtn.className = "sheet-act";
+    photoBtn.innerHTML = cameraSVG + "<span></span>";
+    photoBtn.querySelector("span").textContent = hasPhoto ? "Change step photo" : "Add step photo";
+    photoBtn.onclick = () => { closeSheet(); pickPhoto(360, (d) => setStepPhoto(r, idx, d)); };
+    acts.appendChild(photoBtn);
+    if (hasPhoto) {
+      const rmp = document.createElement("button");
+      rmp.className = "sheet-act";
+      rmp.innerHTML = cameraSVG + "<span>Remove step photo</span>";
+      rmp.onclick = () => { setStepPhoto(r, idx, ""); closeSheet(); };
+      acts.appendChild(rmp);
+    }
     const del = document.createElement("button");
     del.className = "sheet-act danger";
     del.innerHTML = trashSVG + "<span>Remove step</span>";
-    del.onclick = () => { const next = (r.steps || []).slice(); next.splice(idx, 1); updateDoc(doc(db, "items", r.id), { steps: next }); closeSheet(); };
+    del.onclick = () => { const n = steps.slice(); n.splice(idx, 1); updateDoc(doc(db, "items", r.id), { steps: n }); closeSheet(); };
     acts.appendChild(del);
     sheetOpenedAt = Date.now();
     $("sheet").classList.remove("hidden");
+  }
+
+  function autoGrow(ta) { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
+  function setStepPhoto(r, idx, dataUrl) {
+    const next = (r.steps || []).slice();
+    const t = stepText(next[idx]);
+    next[idx] = dataUrl ? { text: t, photo: dataUrl } : t;
+    updateDoc(doc(db, "items", r.id), { steps: next });
+  }
+  function openRecipePhotoSheet(r) {
+    $("sheetTitle").textContent = r.text;
+    const acts = $("sheetActions"); acts.innerHTML = "";
+    const ch = document.createElement("button");
+    ch.className = "sheet-act";
+    ch.innerHTML = cameraSVG + "<span>Change cover photo</span>";
+    ch.onclick = () => { closeSheet(); pickPhoto(520, (d) => updateDoc(doc(db, "items", r.id), { photo: d })); };
+    acts.appendChild(ch);
+    const rm = document.createElement("button");
+    rm.className = "sheet-act danger";
+    rm.innerHTML = trashSVG + "<span>Remove cover photo</span>";
+    rm.onclick = () => { updateDoc(doc(db, "items", r.id), { photo: "" }); closeSheet(); };
+    acts.appendChild(rm);
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
+  function beginEditStep(row, r, idx, text) {
+    row.onclick = null;
+    row.innerHTML = `<textarea class="step-edit"></textarea>`;
+    const ta = row.querySelector(".step-edit");
+    ta.value = text; ta.focus();
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+    autoGrow(ta);
+    ta.addEventListener("input", () => autoGrow(ta));
+    let saved = false;
+    const commit = () => {
+      if (saved) return; saved = true;
+      const v = ta.value.trim();
+      const next = (r.steps || []).slice();
+      if (v) { const ph = stepPhoto(next[idx]); next[idx] = ph ? { text: v, photo: ph } : v; }
+      else next.splice(idx, 1);
+      updateDoc(doc(db, "items", r.id), { steps: next });
+    };
+    ta.addEventListener("blur", commit);
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ta.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); saved = true; render(); }
+    });
+  }
+  function beginAddStep(row, r) {
+    row.onclick = null;
+    row.classList.remove("add-step");
+    row.innerHTML = `<textarea class="step-edit" placeholder="New step…"></textarea>`;
+    const ta = row.querySelector(".step-edit");
+    ta.focus(); autoGrow(ta);
+    ta.addEventListener("input", () => autoGrow(ta));
+    let saved = false;
+    const commit = () => {
+      if (saved) return; saved = true;
+      const v = ta.value.trim();
+      if (v) updateDoc(doc(db, "items", r.id), { steps: [...(r.steps || []), v] });
+      else render();
+    };
+    ta.addEventListener("blur", commit);
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ta.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); saved = true; render(); }
+    });
   }
 
   function parseRecipe(text) {
@@ -1106,7 +1229,11 @@
     try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
   }
   function renderCook() {
-    $("cookStep").textContent = cookSteps[cookIdx] || "";
+    const cur = cookSteps[cookIdx];
+    $("cookStep").textContent = stepText(cur) || "";
+    const ph = stepPhoto(cur);
+    const img = $("cookPhoto");
+    if (ph) { img.src = ph; img.style.display = "block"; } else { img.removeAttribute("src"); img.style.display = "none"; }
     $("cookCounter").textContent = `Step ${cookIdx + 1} of ${cookSteps.length}`;
     $("cookPrev").disabled = cookIdx === 0;
     $("cookNext").textContent = cookIdx >= cookSteps.length - 1 ? "Done" : "Next";
