@@ -80,13 +80,13 @@
     background: rgba(46,42,37,.04); border-radius: 14px;
   }
   .tab {
-    flex: 1; border: none; background: none; font-family: inherit; cursor: pointer;
-    padding: 10px; border-radius: 10px; font-size: 15px; font-weight: 600; color: var(--muted);
-    display: flex; align-items: center; justify-content: center; gap: 7px; transition: all .18s ease;
+    flex: 1; min-width: 0; border: none; background: none; font-family: inherit; cursor: pointer;
+    padding: 9px 5px; border-radius: 10px; font-size: 13.5px; font-weight: 600; color: var(--muted);
+    display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; transition: all .18s ease;
   }
   .tab.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
   .count {
-    font-size: 12px; font-weight: 600; min-width: 20px; height: 20px; padding: 0 6px;
+    font-size: 11px; font-weight: 600; min-width: 17px; height: 18px; padding: 0 5px;
     border-radius: 999px; display: inline-grid; place-items: center;
     background: rgba(46,42,37,.07); color: var(--muted);
   }
@@ -243,6 +243,27 @@
   .avt.lg { width: 32px; height: 32px; font-size: 14px; }
   .gthumb { width: 40px; height: 40px; border-radius: 9px; background-size: cover; background-position: center; flex-shrink: 0; }
   .sheet-photo { display: block; width: 100%; max-width: 300px; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 16px; margin: 6px auto 12px; }
+
+  /* ---------- Recipes ---------- */
+  .recipe-row { cursor: pointer; }
+  .recipe-row .meta { color: var(--muted); font-size: 13px; margin-top: 3px; }
+  .chev { color: var(--muted); font-size: 22px; margin-left: 8px; flex-shrink: 0; }
+  .recipe-head { display: flex; align-items: center; gap: 12px; padding: 4px 2px 14px; flex-wrap: wrap; }
+  .back-btn { background: none; border: none; color: var(--accent); font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 4px 0; }
+  .recipe-title { font-family: "Fraunces", serif; font-size: 22px; font-weight: 600; width: 100%; }
+  .ing-check {
+    width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--line); background: none;
+    flex-shrink: 0; cursor: pointer; padding: 0; position: relative;
+  }
+  .ing-row.sel .ing-check { background: var(--accent); border-color: var(--accent); }
+  .ing-row.sel .ing-check::after { content: "✓"; color: #fff; font-size: 13px; font-weight: 700; position: absolute; inset: 0; display: grid; place-items: center; }
+  .ing-row.sel .text { font-weight: 600; }
+  .recipe-add-btn {
+    display: block; width: 100%; margin: 18px 0 8px; padding: 15px; border: none; border-radius: 14px;
+    background: var(--accent); color: #fff; font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .recipe-add-btn:disabled { background: var(--line); color: var(--muted); cursor: default; }
+  .recipe-add-btn:not(:disabled):active { background: var(--accent-dark); }
   .taskline { display: flex; align-items: center; gap: 10px; }
   .taskline .ttext { flex: 1; min-width: 0; word-break: break-word; }
   .inline-av { margin-left: auto; }
@@ -376,6 +397,7 @@
     <div class="tabs">
       <button class="tab active" data-list="groceries">🛒 Groceries <span class="count" id="count-groceries">0</span></button>
       <button class="tab" data-list="tasks">✓ Tasks <span class="count" id="count-tasks">0</span></button>
+      <button class="tab" data-list="recipes">🍳 Recipes <span class="count" id="count-recipes">0</span></button>
     </div>
 
     <main id="list"></main>
@@ -438,6 +460,8 @@
   let currentList = "groceries";
   let storeFilter = null;
   let upcomingOpen = true;
+  let openRecipeId = null;
+  let selectedIng = new Set();
   let allItems = [];
   let profiles = {};
   let pendingPhoto = null;
@@ -666,11 +690,14 @@
     const today = todayISO();
     $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
     $("count-tasks").textContent = task.filter((i) => !i.done && (!i.due || i.due <= today)).length;
+    $("count-recipes").textContent = allItems.filter((i) => i.list === "recipes").length;
 
     const list = $("list");
     list.innerHTML = "";
+    updateAddPlaceholder();
 
     if (currentList === "tasks") { renderTasks(task, list); return; }
+    if (currentList === "recipes") { renderRecipes(list); return; }
 
     // ----- Groceries -----
     let live = groc.filter((i) => !i.archived)
@@ -766,6 +793,114 @@
       if (upcomingOpen) for (const it of futureArr) wrap.appendChild(taskRow(it));
       list.appendChild(wrap);
     }
+  }
+
+  /* ---------- Recipes ---------- */
+  function renderRecipes(list) {
+    if (openRecipeId) {
+      const r = allItems.find((x) => x.id === openRecipeId);
+      if (!r) { openRecipeId = null; renderRecipes(list); return; }
+      renderRecipeDetail(r, list);
+      return;
+    }
+    const recipes = allItems.filter((i) => i.list === "recipes").sort((a, b) => (a.text || "").localeCompare(b.text || ""));
+    if (recipes.length === 0) {
+      list.innerHTML = `<div class="empty"><div class="em-mark">🍳</div>No recipes yet.<br>Add one below, then open it to add ingredients.</div>`;
+      return;
+    }
+    for (const r of recipes) {
+      const el = document.createElement("div");
+      el.className = "item recipe-row";
+      el.innerHTML = `<div class="body"><div class="text"></div><div class="meta"></div></div><span class="chev">›</span>`;
+      el.querySelector(".text").textContent = r.text;
+      const n = (r.ingredients || []).length;
+      el.querySelector(".meta").textContent = n === 1 ? "1 ingredient" : n + " ingredients";
+      el.onclick = () => { openRecipeId = r.id; selectedIng = new Set(); render(); };
+      attachLongPress(el, () => openRecipeSheet(r));
+      list.appendChild(el);
+    }
+  }
+
+  function renderRecipeDetail(r, list) {
+    const ings = r.ingredients || [];
+    const head = document.createElement("div");
+    head.className = "recipe-head";
+    head.innerHTML = `<button class="back-btn">‹ Recipes</button><div class="recipe-title"></div>`;
+    head.querySelector(".recipe-title").textContent = r.text;
+    head.querySelector(".back-btn").onclick = () => { openRecipeId = null; render(); };
+    list.appendChild(head);
+
+    if (ings.length === 0) {
+      const e = document.createElement("div");
+      e.className = "empty"; e.style.padding = "30px 20px";
+      e.innerHTML = `No ingredients yet.<br><span style="font-size:13px">Add them below.</span>`;
+      list.appendChild(e);
+    }
+
+    for (const ing of ings) {
+      const el = document.createElement("div");
+      el.className = "item ing-row" + (selectedIng.has(ing) ? " sel" : "");
+      el.innerHTML = `<button class="ing-check" aria-label="Select"></button><div class="body"><div class="text"></div></div>`;
+      el.querySelector(".text").textContent = ing;
+      el.onclick = () => toggleIng(ing);
+      attachLongPress(el, () => openIngredientSheet(r, ing));
+      list.appendChild(el);
+    }
+
+    if (ings.length) {
+      const btn = document.createElement("button");
+      btn.className = "recipe-add-btn";
+      const n = selectedIng.size;
+      btn.textContent = n ? `Add ${n} to grocery list` : "Tap the ingredients you need";
+      btn.disabled = !n;
+      btn.onclick = () => addSelectedToGroceries(r);
+      list.appendChild(btn);
+    }
+  }
+
+  function toggleIng(ing) {
+    if (selectedIng.has(ing)) selectedIng.delete(ing); else selectedIng.add(ing);
+    render();
+  }
+
+  async function addSelectedToGroceries() {
+    const existing = new Set(allItems.filter((i) => i.list === "groceries" && !i.archived).map((i) => (i.text || "").toLowerCase()));
+    const toAdd = [...selectedIng].filter((name) => !existing.has(name.toLowerCase()));
+    for (const name of toAdd) {
+      await addDoc(itemsCol, { text: name, list: "groceries", done: false, archived: false, store: "", qty: 1, addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
+    }
+    switchTab("groceries");
+  }
+
+  function openRecipeSheet(r) {
+    $("sheetTitle").textContent = r.text;
+    const acts = $("sheetActions");
+    acts.innerHTML = "";
+    const del = document.createElement("button");
+    del.className = "sheet-act danger";
+    del.innerHTML = trashSVG + "<span>Delete recipe</span>";
+    del.onclick = () => { deleteDoc(doc(db, "items", r.id)); if (openRecipeId === r.id) openRecipeId = null; closeSheet(); };
+    acts.appendChild(del);
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
+
+  function openIngredientSheet(r, ing) {
+    $("sheetTitle").textContent = ing;
+    const acts = $("sheetActions");
+    acts.innerHTML = "";
+    const del = document.createElement("button");
+    del.className = "sheet-act danger";
+    del.innerHTML = trashSVG + "<span>Remove from recipe</span>";
+    del.onclick = () => {
+      const next = (r.ingredients || []).filter((x) => x !== ing);
+      updateDoc(doc(db, "items", r.id), { ingredients: next });
+      selectedIng.delete(ing);
+      closeSheet();
+    };
+    acts.appendChild(del);
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
   }
 
   function rowShell(it) {
@@ -1134,25 +1269,42 @@
     if (!text || !me) return;
     input.value = "";
     input.focus(); // keep keyboard up for rapid entry
+    if (currentList === "recipes") {
+      if (openRecipeId) {
+        const r = allItems.find((i) => i.id === openRecipeId);
+        const next = [...((r && r.ingredients) || []), text];
+        await updateDoc(doc(db, "items", openRecipeId), { ingredients: next });
+      } else {
+        await addDoc(itemsCol, { text, list: "recipes", ingredients: [], addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
+      }
+      return;
+    }
     await addDoc(itemsCol, {
       text, list: currentList, done: false, archived: false, store: "", qty: 1,
       addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp()
     });
   }
+
+  function updateAddPlaceholder() {
+    const i = $("addInput");
+    if (currentList === "tasks") i.placeholder = "Add a task…";
+    else if (currentList === "recipes") i.placeholder = openRecipeId ? "Add an ingredient…" : "Add a recipe…";
+    else i.placeholder = "Add an item…";
+  }
   $("addBtn").onclick = addItem;
   $("addInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } });
 
   /* ---------- Tabs ---------- */
-  document.querySelectorAll(".tab").forEach((t) => {
-    t.onclick = () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-      t.classList.add("active");
-      currentList = t.dataset.list;
-      storeFilter = null;
-      render();
-      $("addInput").focus();
-    };
-  });
+  function switchTab(name) {
+    currentList = name;
+    storeFilter = null;
+    openRecipeId = null;
+    selectedIng = new Set();
+    document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.list === name));
+    render();
+    $("addInput").focus();
+  }
+  document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => switchTab(t.dataset.list); });
 </script>
 </body>
 </html>
