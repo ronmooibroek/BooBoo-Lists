@@ -260,6 +260,15 @@
     color: var(--muted); font-family: inherit; font-size: 13px; padding: 8px 14px;
     border-radius: 999px; text-decoration: underline; text-underline-offset: 2px;
   }
+  .upcoming { margin-top: 20px; }
+  .upcoming-head {
+    display: flex; align-items: center; gap: 9px; width: 100%; cursor: pointer;
+    background: none; border: none; border-top: 1px dashed var(--line);
+    padding: 16px 2px 12px; font-family: inherit;
+  }
+  .up-title { font-family: "Fraunces", serif; font-size: 18px; font-weight: 600; color: var(--ink); }
+  .up-count { font-size: 12px; font-weight: 600; background: rgba(46,42,37,.07); color: var(--muted); border-radius: 999px; padding: 2px 8px; }
+  .up-chev { margin-left: auto; color: var(--muted); font-size: 13px; }
 
   /* ---------- Add bar ---------- */
   .addbar {
@@ -315,6 +324,18 @@
   .intro-greet { font-family: "Fraunces", serif; font-size: 32px; font-weight: 600; }
   .intro-sub { color: var(--muted); font-size: 14px; letter-spacing: .4px; }
   .photo-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
+  .heart-stage { position: relative; display: grid; place-items: center; width: 300px; max-width: 86vw; height: 200px; }
+  .intro-avs { position: absolute; inset: 0; pointer-events: none; }
+  .intro-av {
+    position: absolute; top: 50%; width: 66px; height: 66px; border-radius: 50%;
+    background-size: cover; background-position: center; border: 3px solid var(--bg);
+    box-shadow: 0 6px 18px rgba(46,42,37,.2); display: grid; place-items: center;
+    color: #fff; font-weight: 700; font-size: 24px; overflow: hidden;
+  }
+  .intro-av.left { left: 4px; transform: translateY(-50%) rotate(-6deg); animation: floatL 3.2s ease-in-out infinite; }
+  .intro-av.right { right: 4px; transform: translateY(-50%) rotate(6deg); animation: floatR 3.2s ease-in-out infinite; }
+  @keyframes floatL { 0%, 100% { transform: translateY(-50%) rotate(-6deg); } 50% { transform: translateY(-64%) rotate(-6deg); } }
+  @keyframes floatR { 0%, 100% { transform: translateY(-50%) rotate(6deg); } 50% { transform: translateY(-36%) rotate(6deg); } }
 </style>
 </head>
 <body>
@@ -324,12 +345,14 @@
 
   <!-- Intro / love screen — drop photos into .photo-strip later -->
   <div id="intro" class="intro hidden">
-    <svg class="heart" viewBox="0 0 32 29.6" fill="currentColor" aria-hidden="true">
-      <path d="M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4c0,9.4,9.5,11.9,16,21.2c6.1-9.3,16-12.1,16-21.2C32,3.8,28.2,0,23.6,0z"/>
-    </svg>
+    <div class="heart-stage">
+      <svg class="heart" viewBox="0 0 32 29.6" fill="currentColor" aria-hidden="true">
+        <path d="M23.6,0c-3.4,0-6.3,2.7-7.6,5.6C14.7,2.7,11.8,0,8.4,0C3.8,0,0,3.8,0,8.4c0,9.4,9.5,11.9,16,21.2c6.1-9.3,16-12.1,16-21.2C32,3.8,28.2,0,23.6,0z"/>
+      </svg>
+      <div class="intro-avs" id="introAvs"></div>
+    </div>
     <div class="intro-greet" id="introGreet"></div>
     <div class="intro-sub">made with love</div>
-    <div class="photo-strip" id="photoStrip"><!-- photos go here later --></div>
   </div>
 
   <!-- Sign in -->
@@ -414,6 +437,7 @@
 
   let currentList = "groceries";
   let storeFilter = null;
+  let upcomingOpen = true;
   let allItems = [];
   let profiles = {};
   let pendingPhoto = null;
@@ -592,6 +616,7 @@
   function showIntro() {
     const intro = $("intro");
     $("introGreet").textContent = "Hi " + firstName(me);
+    renderIntroAvatars();
     intro.classList.remove("hidden", "fade-out");
     let done = false;
     const finish = () => {
@@ -604,6 +629,20 @@
     intro.onclick = () => { clearTimeout(timer); finish(); }; // or tap to skip
   }
 
+  function renderIntroAvatars() {
+    const stage = $("introAvs");
+    if (!stage) return;
+    stage.innerHTML = "";
+    knownPeople().slice(0, 2).forEach((p, i) => {
+      const av = document.createElement("span");
+      av.className = "intro-av " + (i === 0 ? "left" : "right");
+      const ph = photoFor(p.uid);
+      if (ph) av.style.backgroundImage = `url("${ph}")`;
+      else { av.style.background = p.uid ? colorFor(p.uid) : "var(--line)"; av.textContent = (p.name || "?")[0].toUpperCase(); }
+      stage.appendChild(av);
+    });
+  }
+
   /* ---------- Live data ---------- */
   function startSync() {
     if (unsub) unsub();
@@ -612,6 +651,7 @@
       allItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       rebuildProfiles();
       updateHeaderAvatar();
+      if (!$("intro").classList.contains("hidden")) renderIntroAvatars();
       render();
     }, (err) => {
       console.error(err);
@@ -625,7 +665,7 @@
     const task = allItems.filter((i) => i.list === "tasks");
     const today = todayISO();
     $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
-    $("count-tasks").textContent = task.filter((i) => !i.done && !(i.hiddenUntil && i.hiddenUntil > today)).length;
+    $("count-tasks").textContent = task.filter((i) => !i.done && (!i.due || i.due <= today)).length;
 
     const list = $("list");
     list.innerHTML = "";
@@ -684,24 +724,47 @@
 
   function renderTasks(task, list) {
     const today = todayISO();
-    const arr = task.filter((i) => !(i.hiddenUntil && i.hiddenUntil > today))
+    const liveArr = task.filter((i) => i.done || !i.due || i.due <= today)
       .sort((a, b) => {
         if (a.done !== b.done) return a.done ? 1 : -1;
         const ad = a.due || "9999-99-99", bd = b.due || "9999-99-99";
         return ad < bd ? -1 : ad > bd ? 1 : 0;
       });
-    if (arr.length === 0) {
+    const futureArr = task.filter((i) => !i.done && i.due && i.due > today)
+      .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
+
+    if (liveArr.length === 0 && futureArr.length === 0) {
       list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
     }
+
     let anyDone = false;
-    for (const it of arr) { list.appendChild(taskRow(it)); anyDone = anyDone || it.done; }
+    for (const it of liveArr) { list.appendChild(taskRow(it)); anyDone = anyDone || it.done; }
+    if (liveArr.length === 0) {
+      const note = document.createElement("div");
+      note.className = "empty"; note.style.padding = "26px 20px";
+      note.innerHTML = `Nothing due right now 🌿`;
+      list.appendChild(note);
+    }
     if (anyDone) {
       const btn = document.createElement("button");
       btn.className = "clear-done";
       btn.textContent = "Clear completed";
       btn.onclick = () => deleteMany(task.filter((i) => i.done));
       list.appendChild(btn);
+    }
+
+    if (futureArr.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "upcoming";
+      const head = document.createElement("button");
+      head.className = "upcoming-head";
+      head.innerHTML = `<span class="up-title">Upcoming</span><span class="up-count"></span><span class="up-chev">${upcomingOpen ? "▾" : "▸"}</span>`;
+      head.querySelector(".up-count").textContent = futureArr.length;
+      head.onclick = () => { upcomingOpen = !upcomingOpen; render(); };
+      wrap.appendChild(head);
+      if (upcomingOpen) for (const it of futureArr) wrap.appendChild(taskRow(it));
+      list.appendChild(wrap);
     }
   }
 
@@ -992,7 +1055,7 @@
         const t = it.repeatType || "interval";
         const base = (t === "interval") ? todayISO() : addDays(todayISO(), 1);
         const next = nextDue(it, base);
-        updateDoc(doc(db, "items", it.id), { hiddenUntil: next, due: next });
+        updateDoc(doc(db, "items", it.id), { due: next });
       };
     }
 
