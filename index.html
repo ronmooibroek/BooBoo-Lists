@@ -240,6 +240,11 @@
     display: inline-grid; place-items: center; color: #fff; font-size: 10px; font-weight: 700;
   }
   .avt.big { width: 46px; height: 46px; font-size: 18px; }
+  .avt.lg { width: 32px; height: 32px; font-size: 14px; }
+  .gthumb { width: 40px; height: 40px; border-radius: 9px; background-size: cover; background-position: center; flex-shrink: 0; }
+  .taskline { display: flex; align-items: center; gap: 10px; }
+  .taskline .ttext { flex: 1; min-width: 0; word-break: break-word; }
+  .inline-av { margin-left: auto; }
   .profile-row { display: flex; align-items: center; gap: 13px; }
   .profile-name { flex: 1; font-size: 16px; font-weight: 500; }
   .profile-btn {
@@ -410,7 +415,7 @@
   let storeFilter = null;
   let allItems = [];
   let profiles = {};
-  let pendingPhotoPerson = null;
+  let pendingPhoto = null;
   let unsub = null;
   let me = null;
 
@@ -434,6 +439,7 @@
   const trashSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>`;
   const saveSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
   const filterSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>`;
+  const cameraSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-2h8l2 2h3v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
 
   const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -733,6 +739,21 @@
       keep.innerHTML = saveSVG + "<span>Keep for next time</span>";
       keep.onclick = () => { updateDoc(doc(db, "items", it.id), { archived: true, done: false }); closeSheet(); };
       acts.appendChild(keep);
+
+      const photo = document.createElement("button");
+      photo.className = "sheet-act";
+      photo.innerHTML = cameraSVG + "<span></span>";
+      photo.querySelector("span").textContent = it.photo ? "Change photo" : "Add photo";
+      photo.onclick = () => { closeSheet(); pickPhoto(220, (dataUrl) => updateDoc(doc(db, "items", it.id), { photo: dataUrl })); };
+      acts.appendChild(photo);
+
+      if (it.photo) {
+        const rm = document.createElement("button");
+        rm.className = "sheet-act";
+        rm.innerHTML = cameraSVG + "<span>Remove photo</span>";
+        rm.onclick = () => { updateDoc(doc(db, "items", it.id), { photo: "" }); closeSheet(); };
+        acts.appendChild(rm);
+      }
     }
     const del = document.createElement("button");
     del.className = "sheet-act danger";
@@ -763,7 +784,12 @@
       const btn = document.createElement("button");
       btn.className = "profile-btn";
       btn.textContent = photoFor(p.uid) ? "Change" : "Choose photo";
-      btn.onclick = () => { pendingPhotoPerson = p; $("photoInput").click(); };
+      btn.onclick = () => pickPhoto(160, async (dataUrl) => {
+        await setProfilePhoto(p, dataUrl);
+        profiles[p.uid] = dataUrl;
+        updateHeaderAvatar();
+        openProfilesSheet();
+      });
       row.appendChild(btn);
       acts.appendChild(row);
     }
@@ -771,17 +797,14 @@
     $("sheet").classList.remove("hidden");
   }
 
+  function pickPhoto(size, done) { pendingPhoto = { size, done }; $("photoInput").click(); }
   $("photoInput").addEventListener("change", () => {
     const file = $("photoInput").files[0];
-    if (!file || !pendingPhotoPerson) return;
-    const person = pendingPhotoPerson;
-    fileToAvatar(file, 160, async (dataUrl) => {
-      await setProfilePhoto(person, dataUrl);
-      profiles[person.uid] = dataUrl;
-      updateHeaderAvatar();
-      openProfilesSheet();
-    });
+    const p = pendingPhoto;
     $("photoInput").value = "";
+    pendingPhoto = null;
+    if (!file || !p) return;
+    fileToAvatar(file, p.size, (dataUrl) => p.done(dataUrl));
   });
 
   function openStoreSheet(store) {
@@ -935,16 +958,14 @@
   function taskRow(it) {
     const el = rowShell(it);
     const body = el.querySelector(".body");
-    body.innerHTML = `<div class="text"></div><div class="meta"></div>`;
-    body.querySelector(".text").textContent = it.text;
+    body.innerHTML = `<div class="text taskline"><span class="ttext"></span></div><div class="meta"></div>`;
+    body.querySelector(".ttext").textContent = it.text;
     const meta = body.querySelector(".meta");
 
     if (it.assignee) {
-      const a = document.createElement("span"); a.className = "m-assignee";
-      a.appendChild(avatarEl(it.assigneeUid || "", it.assignee));
-      const n = document.createElement("span"); n.className = "an"; n.textContent = it.assignee;
-      a.appendChild(n);
-      meta.appendChild(a);
+      const av = avatarEl(it.assigneeUid || "", it.assignee, "lg");
+      av.classList.add("inline-av");
+      body.querySelector(".text").appendChild(av);
     }
     if (it.due) {
       const d = document.createElement("span");
@@ -1003,6 +1024,12 @@
     }
 
     attachLongPress(el, () => openSheet(it));
+    if (it.photo) {
+      const t = document.createElement("span");
+      t.className = "gthumb";
+      t.style.backgroundImage = `url("${it.photo}")`;
+      el.insertBefore(t, body);
+    }
     return el;
   }
 
