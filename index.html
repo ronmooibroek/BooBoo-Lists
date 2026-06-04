@@ -242,6 +242,7 @@
   .avt.big { width: 46px; height: 46px; font-size: 18px; }
   .avt.lg { width: 32px; height: 32px; font-size: 14px; }
   .gthumb { width: 40px; height: 40px; border-radius: 9px; background-size: cover; background-position: center; flex-shrink: 0; }
+  .sheet-photo { display: block; width: 100%; max-width: 300px; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 16px; margin: 6px auto 12px; }
   .taskline { display: flex; align-items: center; gap: 10px; }
   .taskline .ttext { flex: 1; min-width: 0; word-break: break-word; }
   .inline-av { margin-left: auto; }
@@ -733,6 +734,12 @@
     $("sheetTitle").textContent = it.text;
     const acts = $("sheetActions");
     acts.innerHTML = "";
+    if (it.photo) {
+      const img = document.createElement("img");
+      img.className = "sheet-photo";
+      img.src = it.photo;
+      acts.appendChild(img);
+    }
     if (it.list === "groceries") {
       const keep = document.createElement("button");
       keep.className = "sheet-act keep";
@@ -744,7 +751,7 @@
       photo.className = "sheet-act";
       photo.innerHTML = cameraSVG + "<span></span>";
       photo.querySelector("span").textContent = it.photo ? "Change photo" : "Add photo";
-      photo.onclick = () => { closeSheet(); pickPhoto(220, (dataUrl) => updateDoc(doc(db, "items", it.id), { photo: dataUrl })); };
+      photo.onclick = () => { closeSheet(); pickPhoto(400, (dataUrl) => updateDoc(doc(db, "items", it.id), { photo: dataUrl })); };
       acts.appendChild(photo);
 
       if (it.photo) {
