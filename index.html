@@ -395,6 +395,61 @@
   .intro-av.right { right: 4px; transform: translateY(-50%) rotate(6deg); animation: floatR 3.2s ease-in-out infinite; }
   @keyframes floatL { 0%, 100% { transform: translateY(-50%) rotate(-6deg); } 50% { transform: translateY(-64%) rotate(-6deg); } }
   @keyframes floatR { 0%, 100% { transform: translateY(-50%) rotate(6deg); } 50% { transform: translateY(-36%) rotate(6deg); } }
+  /* ===================== Cute polish layer ===================== */
+  :root {
+    --bg: #faf5ee;
+    --surface: #fffefb;
+    --ink: #34302a;
+    --muted: #9b9082;
+    --accent: #d4623e;
+    --accent-dark: #b54e2e;
+    --accent2: #e3a14e;
+    --berry: #cf6f8f;
+    --done: #82996e;
+    --line: #ece3d5;
+    --shadow: 0 1px 2px rgba(52,48,42,.04), 0 10px 26px rgba(52,48,42,.07);
+    --r-card: 18px;
+  }
+  html { scroll-behavior: smooth; }
+  body { background-color: var(--bg); }
+  ::selection { background: rgba(212,98,62,.18); }
+
+  /* Tactile, rounded cards */
+  .item { border-radius: var(--r-card); transition: transform .12s ease, box-shadow .12s ease; }
+  .item:active { transform: scale(.992); }
+  .gthumb, .recipe-cover, .step-img, .sheet-photo { box-shadow: 0 2px 10px rgba(52,48,42,.08); }
+
+  /* Playful per-tab identity */
+  .tabs { background: rgba(52,48,42,.05); border-radius: 16px; }
+  .tab { border-radius: 12px; transition: color .2s ease, background .2s ease; }
+  .tab[data-list="groceries"].active { color: var(--accent); }
+  .tab[data-list="groceries"].active .count { background: var(--accent); }
+  .tab[data-list="tasks"].active { color: var(--done); }
+  .tab[data-list="tasks"].active .count { background: var(--done); }
+  .tab[data-list="recipes"].active { color: var(--accent2); }
+  .tab[data-list="recipes"].active .count { background: var(--accent2); }
+
+  /* Floaty add bar + bouncy plus */
+  .addinner { border-radius: 18px; box-shadow: 0 6px 30px rgba(52,48,42,.13); }
+  .add { border-radius: 14px; transition: transform .14s cubic-bezier(.34,1.56,.64,1), background .12s; }
+  .add:active { transform: scale(.86) rotate(-10deg); }
+
+  /* Springy checks & friendly chips */
+  .check, .ing-check { transition: all .2s cubic-bezier(.34,1.56,.64,1); }
+  .store-chip, .schip, .person, .rep-mode, .profile-btn, .rc-btn, .sheet-act, .recipe-add-btn {
+    transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+  }
+  .store-chip:active, .schip:active, .person:active, .rep-mode:active, .rc-btn:active, .sheet-act:active { transform: scale(.95); }
+
+  /* Cuter empty states */
+  .empty { color: var(--muted); line-height: 1.5; }
+  .empty .em-mark { font-size: 50px; display: block; margin-bottom: 6px; }
+
+  /* Softer section headings */
+  .suggest-h, .rc-section-h, .up-title, .recipe-title, .overlay-title, .signin h1, .brand { letter-spacing: -.3px; }
+
+  /* Rounear inputs */
+  .due-input, .rep-input, .import-text, .step-edit { border-radius: 12px; }
 </style>
 </head>
 <body>
