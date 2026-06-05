@@ -450,6 +450,10 @@
 
   /* Rounear inputs */
   .due-input, .rep-input, .import-text, .step-edit { border-radius: 12px; }
+  .drag-handle { display: grid; place-items: center; width: 30px; height: 30px; color: var(--muted); cursor: grab; touch-action: none; flex-shrink: 0; opacity: .5; }
+  .drag-handle svg { width: 18px; height: 18px; }
+  .drag-handle:active { cursor: grabbing; opacity: .8; }
+  .item.dragging { box-shadow: 0 12px 32px rgba(52,48,42,.24); transform: scale(1.02); position: relative; z-index: 5; opacity: .97; }
 </style>
 </head>
 <body>
@@ -617,6 +621,42 @@
   const cameraSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-2h8l2 2h3v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
   const stepText = (s) => (typeof s === "string" ? s : (s && s.text) || "");
   const stepPhoto = (s) => (typeof s === "string" ? "" : (s && s.photo) || "");
+  const gripSVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`;
+  const orderOf = (it) => (typeof it.order === "number" ? it.order : 1e15);
+  const LOVE_MSGS = [
+    "Made with love, just for us.", "You're my favorite person.", "Two hearts, one little list.",
+    "Love you to the store and back.", "Home is wherever you are.", "You + me = forever.",
+    "My favorite hello, my hardest goodbye.", "Still crazy about you.", "You make ordinary days golden.",
+    "Partners in everything.", "You're my person.", "Lucky to do life with you.",
+    "Every list is better with you on it.", "You're the best thing on my list.", "Together is my favorite place.",
+    "My whole heart, always.", "You had me at hello.", "Forever your teammate.", "Falling for you, daily.",
+    "You're my happy place.", "Grocery runs are cuter with you.", "Let's grow old and grumpy together.",
+    "You're my sweetest habit.", "I choose you, again and again.", "Better together, always.",
+    "You make my heart do the thing.", "Hand in hand, you and me.", "My favorite notification is you.",
+    "Love you more than coffee. Almost.", "You're worth every mile.", "Doing nothing with you is everything.",
+    "My heart says your name.", "You're my calm and my confetti.", "Cheers to us, every day.",
+    "You're my plus-one for life.", "Still my favorite adventure.", "Love looks good on us.",
+    "You make the chores fun.", "Forever filling my cart with you.", "My favorite kind of busy is us.",
+    "You're home to me.", "Counting groceries and blessings.", "You're the recipe for my happy.",
+    "Sweeter than dessert, that's you.", "Let's make a little magic today.", "You're my once-in-a-lifetime.",
+    "My heart picked you.", "Every day, I'd choose this.", "You're my favorite yes.", "Together we've got this.",
+    "Love you a whole bunch.", "You're my best idea ever.", "My favorite list is our life.",
+    "Stuck on you, happily.", "You make my world softer.", "Two peas, one pod.", "You're my kind of wonderful.",
+    "Heart full, cart full.", "Adore you, plain and simple.", "You're my today and tomorrow.",
+    "Let's keep choosing us.", "You make me ridiculously happy.", "My favorite teammate, forever.",
+    "You're the sprinkle on my day.", "Love grows here.", "You + groceries + me = perfect.",
+    "You're my warm and fuzzy.", "So grateful it's you.", "Crushing on you still.", "You're my sweetest to-do.",
+    "Made better by you.", "My heart and my cart are full.", "You're my little slice of joy.",
+    "Always reaching for your hand.", "You're my favorite chapter.", "Let's be cozy together.",
+    "You make me smile for no reason.", "My person, my peace.", "You're my best everyday.", "Love you to pieces.",
+    "You're the cherry on top.", "Doing life, loving you.", "You're my soft landing.",
+    "My favorite kind of forever.", "You light me up.", "Sweet on you, always.", "You're my favorite reason.",
+    "Hearts over errands.", "You make the little things big.", "My love, my list, my life.",
+    "You're the best part of my day.", "Forever picking you first.", "You're my happily-ever-now.",
+    "So in love with this life.", "You're my dream come true.", "Let's fill today with love.",
+    "You're my whole heart's wish.", "Together is our superpower.", "You make me the lucky one.",
+    "Love you, today and always."
+  ];
 
   const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
   const addDays = (iso, n) => { const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
@@ -768,6 +808,8 @@
   function showIntro() {
     const intro = $("intro");
     $("introGreet").textContent = "Hi " + firstName(me);
+    const sub = document.querySelector(".intro-sub");
+    if (sub) sub.textContent = LOVE_MSGS[Math.floor(Math.random() * LOVE_MSGS.length)];
     renderIntroAvatars();
     intro.classList.remove("hidden", "fade-out");
     let done = false;
@@ -777,7 +819,7 @@
       intro.classList.add("fade-out");
       setTimeout(() => intro.classList.add("hidden"), 600);
     };
-    const timer = setTimeout(finish, 2200);   // auto-advances after ~2.2s
+    const timer = setTimeout(finish, 5000);   // auto-advances after 5s
     intro.onclick = () => { clearTimeout(timer); finish(); }; // or tap to skip
   }
 
@@ -828,18 +870,20 @@
     if (currentList === "recipes") { renderRecipes(list); return; }
 
     // ----- Groceries -----
-    let live = groc.filter((i) => !i.archived)
-      .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1)); // open first, bought sink
+    let liveAll = groc.filter((i) => !i.archived);
     let suggestions = groc.filter((i) => i.archived)
       .sort((a, b) => (a.text || "").localeCompare(b.text || ""));
 
     if (storeFilter) {
       list.appendChild(filterBar());
-      live = live.filter((i) => (i.store || "") === storeFilter);
+      liveAll = liveAll.filter((i) => (i.store || "") === storeFilter);
       suggestions = suggestions.filter((i) => (i.store || "") === storeFilter);
     }
 
-    if (live.length === 0 && suggestions.length === 0) {
+    const active = liveAll.filter((i) => !i.done).sort((a, b) => orderOf(a) - orderOf(b));
+    const bought = liveAll.filter((i) => i.done);
+
+    if (active.length === 0 && bought.length === 0 && suggestions.length === 0) {
       const e = document.createElement("div");
       e.className = "empty";
       e.innerHTML = storeFilter
@@ -849,17 +893,22 @@
       return;
     }
 
-    let anyBought = false;
-    for (const it of live) { list.appendChild(groceryRow(it)); anyBought = anyBought || it.done; }
+    const sortWrap = document.createElement("div");
+    sortWrap.className = "sortable";
+    for (const it of active) sortWrap.appendChild(groceryRow(it, true));
+    list.appendChild(sortWrap);
+    makeSortable(sortWrap);
 
-    if (live.length === 0) {
+    if (active.length === 0 && bought.length === 0) {
       const note = document.createElement("div");
       note.className = "empty"; note.style.padding = "26px 20px";
       note.innerHTML = `List's all clear 🎉<br><span style="font-size:13px">Tap a “buy again” item below to start the next trip.</span>`;
       list.appendChild(note);
     }
 
-    if (anyBought) {
+    for (const it of bought) list.appendChild(groceryRow(it, false));
+
+    if (bought.length) {
       const btn = document.createElement("button");
       btn.className = "clear-done";
       btn.textContent = "Save bought items for next time ↓";
@@ -879,33 +928,37 @@
 
   function renderTasks(task, list) {
     const today = todayISO();
-    const liveArr = task.filter((i) => i.done || !i.due || i.due <= today)
-      .sort((a, b) => {
-        if (a.done !== b.done) return a.done ? 1 : -1;
-        const ad = a.due || "9999-99-99", bd = b.due || "9999-99-99";
-        return ad < bd ? -1 : ad > bd ? 1 : 0;
-      });
+    const active = task.filter((i) => !i.done && (!i.due || i.due <= today))
+      .sort((a, b) => orderOf(a) - orderOf(b));
+    const doneArr = task.filter((i) => i.done);
     const futureArr = task.filter((i) => !i.done && i.due && i.due > today)
       .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
 
-    if (liveArr.length === 0 && futureArr.length === 0) {
+    if (active.length === 0 && doneArr.length === 0 && futureArr.length === 0) {
       list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
     }
 
-    let anyDone = false;
-    for (const it of liveArr) { list.appendChild(taskRow(it)); anyDone = anyDone || it.done; }
-    if (liveArr.length === 0) {
+    const sortWrap = document.createElement("div");
+    sortWrap.className = "sortable";
+    for (const it of active) sortWrap.appendChild(taskRow(it, true));
+    list.appendChild(sortWrap);
+    makeSortable(sortWrap);
+
+    if (active.length === 0 && doneArr.length === 0) {
       const note = document.createElement("div");
       note.className = "empty"; note.style.padding = "26px 20px";
       note.innerHTML = `Nothing due right now 🌿`;
       list.appendChild(note);
     }
-    if (anyDone) {
+
+    for (const it of doneArr) list.appendChild(taskRow(it, false));
+
+    if (doneArr.length) {
       const btn = document.createElement("button");
       btn.className = "clear-done";
       btn.textContent = "Clear completed";
-      btn.onclick = () => deleteMany(task.filter((i) => i.done));
+      btn.onclick = () => deleteMany(doneArr);
       list.appendChild(btn);
     }
 
@@ -918,7 +971,7 @@
       head.querySelector(".up-count").textContent = futureArr.length;
       head.onclick = () => { upcomingOpen = !upcomingOpen; render(); };
       wrap.appendChild(head);
-      if (upcomingOpen) for (const it of futureArr) wrap.appendChild(taskRow(it));
+      if (upcomingOpen) for (const it of futureArr) wrap.appendChild(taskRow(it, false));
       list.appendChild(wrap);
     }
   }
@@ -1054,6 +1107,14 @@
     addRow.textContent = "+ Add a step";
     addRow.onclick = () => beginAddStep(addRow, r);
     list.appendChild(addRow);
+
+    const nh = document.createElement("div"); nh.className = "rc-section-h"; nh.textContent = "Notes";
+    list.appendChild(nh);
+    const notesEl = document.createElement("div");
+    if (r.notes) { notesEl.className = "recipe-notes"; notesEl.textContent = r.notes; }
+    else { notesEl.className = "add-step"; notesEl.textContent = "+ Add notes"; }
+    notesEl.onclick = () => beginEditNotes(notesEl, r);
+    list.appendChild(notesEl);
   }
 
   function toggleIng(ing) {
@@ -1581,7 +1642,7 @@
     $("sheet").classList.remove("hidden");
   }
 
-  function taskRow(it) {
+  function taskRow(it, sortable) {
     const el = rowShell(it);
     const body = el.querySelector(".body");
     body.innerHTML = `<div class="text taskline"><span class="ttext"></span></div><div class="meta"></div>`;
@@ -1605,6 +1666,8 @@
     }
     if (!meta.children.length) meta.remove();
 
+    if (sortable && !it.done) addHandle(el, it);
+
     // Repeating tasks reschedule on check-off instead of staying done
     if (isRepeating(it) && !it.done) {
       el.querySelector(".check").onclick = () => {
@@ -1619,7 +1682,7 @@
     return el;
   }
 
-  function groceryRow(it) {
+  function groceryRow(it, sortable) {
     const el = rowShell(it);
     const body = el.querySelector(".body");
     const qty = it.qty || 1;
@@ -1647,6 +1710,7 @@
         attachLongPress(chip, () => openStoreSheet(store));
       }
       el.querySelector(".row-actions").appendChild(chip);
+      if (sortable) addHandle(el, it);
     }
 
     attachLongPress(el, () => openSheet(it));
@@ -1681,6 +1745,57 @@
     const batch = writeBatch(db);
     items.forEach((i) => batch.delete(doc(db, "items", i.id)));
     await batch.commit();
+  }
+
+  function addHandle(el, it) {
+    el.dataset.sort = "1"; el.dataset.id = it.id;
+    const h = document.createElement("span");
+    h.className = "drag-handle"; h.innerHTML = gripSVG;
+    ["touchstart", "mousedown"].forEach((ev) => h.addEventListener(ev, (e) => e.stopPropagation()));
+    el.querySelector(".row-actions").appendChild(h);
+  }
+  function getRowAfter(wrap, y) {
+    const els = [...wrap.querySelectorAll('[data-sort]:not(.dragging)')];
+    let best = { offset: -Infinity, el: null };
+    for (const child of els) {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > best.offset) best = { offset, el: child };
+    }
+    return best.el;
+  }
+  function commitOrder(wrap) {
+    const ids = [...wrap.querySelectorAll('[data-sort]')].map((el) => el.dataset.id);
+    const batch = writeBatch(db);
+    ids.forEach((id, i) => batch.update(doc(db, "items", id), { order: i }));
+    batch.commit();
+  }
+  function makeSortable(wrap) {
+    wrap.querySelectorAll('[data-sort]').forEach((row) => {
+      const handle = row.querySelector(".drag-handle");
+      if (!handle) return;
+      handle.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        const pid = e.pointerId;
+        row.classList.add("dragging");
+        try { handle.setPointerCapture(pid); } catch (_) {}
+        const move = (ev) => {
+          const after = getRowAfter(wrap, ev.clientY);
+          if (after == null) wrap.appendChild(row);
+          else if (after !== row) wrap.insertBefore(row, after);
+        };
+        const up = () => {
+          row.classList.remove("dragging");
+          handle.removeEventListener("pointermove", move);
+          handle.removeEventListener("pointerup", up);
+          handle.removeEventListener("pointercancel", up);
+          commitOrder(wrap);
+        };
+        handle.addEventListener("pointermove", move);
+        handle.addEventListener("pointerup", up);
+        handle.addEventListener("pointercancel", up);
+      });
+    });
   }
 
   /* ---------- Add ---------- */
