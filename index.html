@@ -452,8 +452,8 @@
 
   /* Rounear inputs */
   .due-input, .rep-input, .import-text, .step-edit { border-radius: 12px; }
-  .drag-handle { display: grid; place-items: center; width: 30px; height: 30px; color: var(--muted); cursor: grab; touch-action: none; flex-shrink: 0; opacity: .5; }
-  .drag-handle svg { width: 18px; height: 18px; }
+  .drag-handle { display: grid; place-items: center; width: 32px; height: 36px; color: var(--muted); cursor: grab; touch-action: none; flex-shrink: 0; opacity: .5; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  .drag-handle svg { width: 18px; height: 18px; pointer-events: none; }
   .drag-handle:active { cursor: grabbing; opacity: .8; }
   .item.dragging { box-shadow: 0 12px 32px rgba(52,48,42,.24); transform: scale(1.02); position: relative; z-index: 5; opacity: .97; }
   .cook-timer { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 26px; width: 100%; max-width: 420px; }
@@ -465,6 +465,9 @@
   .ct-adjust button:active { transform: scale(.94); }
   .ct-controls { display: flex; gap: 12px; width: 100%; }
   .ct-controls .cook-btn { flex: 1; }
+  .recipe-notes { white-space: pre-wrap; line-height: 1.5; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; box-shadow: var(--shadow); cursor: pointer; }
+  .recipe-notes.editing { cursor: default; padding: 0; border: none; box-shadow: none; background: none; }
+  .notes-edit { width: 100%; min-height: 92px; font-family: inherit; font-size: 16px; line-height: 1.5; border: 1.5px solid var(--accent); border-radius: 12px; padding: 11px 12px; background: var(--surface); color: var(--ink); resize: none; outline: none; box-sizing: border-box; }
 </style>
 </head>
 <body>
@@ -1293,6 +1296,27 @@
     });
   }
 
+  function beginEditNotes(el, r) {
+    el.onclick = null;
+    el.className = "recipe-notes editing";
+    el.innerHTML = `<textarea class="notes-edit" placeholder="Tips, substitutions, serving ideas…"></textarea>`;
+    const ta = el.querySelector(".notes-edit");
+    ta.value = r.notes || "";
+    ta.focus();
+    try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {}
+    autoGrow(ta);
+    ta.addEventListener("input", () => autoGrow(ta));
+    let saved = false;
+    const commit = () => {
+      if (saved) return; saved = true;
+      updateDoc(doc(db, "items", r.id), { notes: ta.value.trim() });
+    };
+    ta.addEventListener("blur", commit);
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.preventDefault(); saved = true; render(); }
+    });
+  }
+
   function parseRecipe(text) {
     const lines = text.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter((l) => l.length);
     let title = lines[0] || "Recipe";
@@ -1301,21 +1325,33 @@
     if (sv) servings = sv[1].replace(/\s+/g, " ");
     const isIngHdr = (l) => /^ingredients?\b/i.test(l) && l.length < 28;
     const isStepHdr = (l) => /^(directions?|method|instructions?|steps?|preparation)\b/i.test(l) && l.length < 28;
-    let ingStart = -1, stepStart = -1;
+    // A notes header is the word Note(s)/Tip(s) alone on a line, or followed by a colon.
+    const isNotesHdr = (l) => /^(notes?|tips?)\s*:?\s*$/i.test(l) || /^(notes?|tips?)\s*:\s*\S/i.test(l);
+    let ingStart = -1, stepStart = -1, notesStart = -1;
     lines.forEach((l, idx) => {
-      if (ingStart === -1 && isIngHdr(l)) ingStart = idx;
-      else if (ingStart !== -1 && stepStart === -1 && isStepHdr(l)) stepStart = idx;
+      if (isIngHdr(l) && ingStart === -1) ingStart = idx;
+      else if (isStepHdr(l) && ingStart !== -1 && stepStart === -1) stepStart = idx;
+      else if (isNotesHdr(l) && notesStart === -1 && idx > 0) notesStart = idx;
     });
+
+    let notes = "";
+    if (notesStart !== -1) {
+      const headTail = lines[notesStart].replace(/^(notes?|tips?)\s*:?\s*/i, "").trim();
+      const rest = lines.slice(notesStart + 1).map((l) => l.replace(/^[-•*▢]\s*/, "")).join("\n").trim();
+      notes = [headTail, rest].filter(Boolean).join("\n").trim();
+    }
+    const bodyEnd = notesStart !== -1 ? notesStart : lines.length;
+
     let ingredients = [], steps = [];
     if (ingStart !== -1) {
       const before = lines.slice(0, ingStart);
       if (before.length) title = before[0];
-      const ingEnd = stepStart > ingStart ? stepStart : lines.length;
+      const ingEnd = (stepStart > ingStart) ? stepStart : bodyEnd;
       ingredients = lines.slice(ingStart + 1, ingEnd);
-      if (stepStart !== -1) steps = lines.slice(stepStart + 1);
+      if (stepStart !== -1) steps = lines.slice(stepStart + 1, bodyEnd);
     } else {
       const unit = /\b(cups?|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|oz|ounces?|lb|pounds?|ml|l|litres?|liters?|cloves?|pinch|cans?|pkg|packages?|slices?|sticks?)\b/i;
-      for (const l of lines.slice(1)) {
+      for (const l of lines.slice(1, bodyEnd)) {
         const looksIng = (/^[\d¼½¾⅓⅔⅛⅜⅝⅞]/.test(l) || unit.test(l)) && l.length < 80;
         if (looksIng) ingredients.push(l); else steps.push(l);
       }
@@ -1324,7 +1360,7 @@
     ingredients = ingredients.map(strip).filter(Boolean);
     steps = steps.map(strip).filter(Boolean);
     if (isIngHdr(title) || isStepHdr(title)) title = "Recipe";
-    return { title: title.slice(0, 80), servings, ingredients, steps };
+    return { title: title.slice(0, 80), servings, ingredients, steps, notes };
   }
 
   function loadScript(src) {
@@ -1351,10 +1387,11 @@
       const existing = allItems.find((i) => i.id === importTarget);
       const update = { ingredients: r.ingredients, steps: r.steps, servings: r.servings };
       if (existing && !((existing.text || "").trim()) && r.title) update.text = r.title;
+      if (r.notes) update.notes = r.notes;
       await updateDoc(doc(db, "items", importTarget), update);
       openRecipeId = importTarget;
     } else {
-      const ref = await addDoc(itemsCol, { text: r.title || "Recipe", list: "recipes", ingredients: r.ingredients, steps: r.steps, servings: r.servings, addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
+      const ref = await addDoc(itemsCol, { text: r.title || "Recipe", list: "recipes", ingredients: r.ingredients, steps: r.steps, servings: r.servings, notes: r.notes || "", addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
       openRecipeId = ref.id;
     }
     selectedIng = new Set();
@@ -1926,25 +1963,29 @@
       const handle = row.querySelector(".drag-handle");
       if (!handle) return;
       handle.addEventListener("pointerdown", (e) => {
+        if (e.button && e.button !== 0) return;
         e.preventDefault();
-        const pid = e.pointerId;
+        e.stopPropagation();
         row.classList.add("dragging");
-        try { handle.setPointerCapture(pid); } catch (_) {}
         const move = (ev) => {
+          ev.preventDefault();
           const after = getRowAfter(wrap, ev.clientY);
-          if (after == null) wrap.appendChild(row);
-          else if (after !== row) wrap.insertBefore(row, after);
+          if (after == null) {
+            if (wrap.lastElementChild !== row) wrap.appendChild(row);
+          } else if (after !== row && row.nextElementSibling !== after) {
+            wrap.insertBefore(row, after);
+          }
         };
-        const up = () => {
+        const end = () => {
           row.classList.remove("dragging");
-          handle.removeEventListener("pointermove", move);
-          handle.removeEventListener("pointerup", up);
-          handle.removeEventListener("pointercancel", up);
+          document.removeEventListener("pointermove", move);
+          document.removeEventListener("pointerup", end);
+          document.removeEventListener("pointercancel", end);
           commitOrder(wrap);
         };
-        handle.addEventListener("pointermove", move);
-        handle.addEventListener("pointerup", up);
-        handle.addEventListener("pointercancel", up);
+        document.addEventListener("pointermove", move, { passive: false });
+        document.addEventListener("pointerup", end);
+        document.addEventListener("pointercancel", end);
       });
     });
   }
