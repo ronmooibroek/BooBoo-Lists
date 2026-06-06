@@ -293,7 +293,9 @@
   .overlay-cancel { width: 100%; background: none; border: none; color: var(--muted); font-family: inherit; font-size: 15px; font-weight: 600; padding: 14px; cursor: pointer; margin-top: 4px; }
 
   /* Cooking mode */
-  .cook { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px 24px; text-align: center; }
+  .cook { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; padding: 30px 24px; text-align: center; }
+  .cook > .cook-title { margin-top: auto; }
+  .cook > .cook-nav { margin-bottom: auto; }
   .cook-close { position: absolute; top: max(16px, env(safe-area-inset-top)); right: 16px; background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; }
   .cook-title { font-family: "Fraunces", serif; font-size: 22px; font-weight: 600; margin-bottom: 6px; }
   .cook-counter { color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; margin-bottom: 26px; }
@@ -454,6 +456,15 @@
   .drag-handle svg { width: 18px; height: 18px; }
   .drag-handle:active { cursor: grabbing; opacity: .8; }
   .item.dragging { box-shadow: 0 12px 32px rgba(52,48,42,.24); transform: scale(1.02); position: relative; z-index: 5; opacity: .97; }
+  .cook-timer { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 26px; width: 100%; max-width: 420px; }
+  .ct-time { font-family: "Fraunces", serif; font-size: 56px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .cook-timer.ringing .ct-time { color: var(--accent); animation: ctpulse .6s ease-in-out infinite; }
+  @keyframes ctpulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+  .ct-adjust { display: flex; gap: 8px; width: 100%; }
+  .ct-adjust button { flex: 1; padding: 11px 4px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface); font-family: inherit; font-size: 15px; font-weight: 600; color: var(--ink); cursor: pointer; }
+  .ct-adjust button:active { transform: scale(.94); }
+  .ct-controls { display: flex; gap: 12px; width: 100%; }
+  .ct-controls .cook-btn { flex: 1; }
 </style>
 </head>
 <body>
@@ -542,6 +553,19 @@
     <div class="cook-counter" id="cookCounter"></div>
     <img id="cookPhoto" class="cook-photo" style="display:none" alt="" />
     <div class="cook-step" id="cookStep"></div>
+    <div id="cookTimer" class="cook-timer" style="display:none">
+      <div class="ct-time" id="ctTime">0:00</div>
+      <div class="ct-adjust">
+        <button type="button" data-d="-60">−1m</button>
+        <button type="button" data-d="-10">−10s</button>
+        <button type="button" data-d="10">+10s</button>
+        <button type="button" data-d="60">+1m</button>
+      </div>
+      <div class="ct-controls">
+        <button id="ctToggle" type="button" class="cook-btn primary">Start</button>
+        <button id="ctReset" type="button" class="cook-btn">Reset</button>
+      </div>
+    </div>
     <div class="cook-nav">
       <button id="cookPrev" class="cook-btn">Back</button>
       <button id="cookNext" class="cook-btn primary">Next</button>
@@ -592,6 +616,9 @@
   let cookSteps = [];
   let cookIdx = 0;
   let wakeLock = null;
+  let ctState = { base: 0, remaining: 0, running: false, done: false, endTime: 0, tick: null };
+  let audioCtx = null;
+  let alarmNodes = [];
   let allItems = [];
   let profiles = {};
   let pendingPhoto = null;
@@ -1353,6 +1380,7 @@
     $("cookCounter").textContent = `Step ${cookIdx + 1} of ${cookSteps.length}`;
     $("cookPrev").disabled = cookIdx === 0;
     $("cookNext").textContent = cookIdx >= cookSteps.length - 1 ? "Done" : "Next";
+    setupTimer(parseStepSeconds(stepText(cur)));
   }
   function cookNav(d) {
     if (d > 0 && cookIdx >= cookSteps.length - 1) { closeCook(); return; }
@@ -1361,7 +1389,125 @@
   }
   function closeCook() {
     $("cook").classList.add("hidden");
+    stopAlarm(); ctStopTick();
     if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+  }
+
+  // ---- Cook-mode step timer ----
+  function parseStepSeconds(text) {
+    if (!text) return 0;
+    const t = String(text).toLowerCase();
+    const re = /(\d+(?:\.\d+)?)(?:\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?))?\s*(hours?|hrs?|hr|h|minutes?|mins?|min|m|seconds?|secs?|sec|s)\b/g;
+    let secs = 0, matched = false, mm;
+    while ((mm = re.exec(t))) {
+      const lo = parseFloat(mm[1]);
+      const hi = mm[2] ? parseFloat(mm[2]) : lo;
+      const val = Math.max(lo, hi); // use the generous end of a range
+      const u = mm[3];
+      const mult = /^h/.test(u) ? 3600 : /^m/.test(u) ? 60 : 1;
+      secs += val * mult;
+      matched = true;
+    }
+    return matched ? Math.round(secs) : 0;
+  }
+  function fmtTime(s) {
+    s = Math.max(0, Math.round(s));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    const p = (n) => String(n).padStart(2, "0");
+    return h > 0 ? `${h}:${p(m)}:${p(ss)}` : `${m}:${p(ss)}`;
+  }
+  function ensureAudio() {
+    try {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    } catch (e) {}
+  }
+  function beep(freq, start, dur, vol) {
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = "sine"; o.frequency.value = freq;
+    o.connect(g); g.connect(audioCtx.destination);
+    const t0 = audioCtx.currentTime + start;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(vol, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.start(t0); o.stop(t0 + dur + 0.03);
+    alarmNodes.push(o);
+    o.onended = () => { alarmNodes = alarmNodes.filter((n) => n !== o); };
+  }
+  function playAlarm() {
+    ensureAudio();
+    if (!audioCtx) return;
+    let t = 0;
+    for (let r = 0; r < 6; r++) { // ~6s of a rising 3-note chime
+      beep(880, t, 0.18, 0.32);
+      beep(1175, t + 0.2, 0.18, 0.32);
+      beep(1568, t + 0.4, 0.3, 0.32);
+      t += 1.0;
+    }
+    try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 600]); } catch (e) {}
+  }
+  function stopAlarm() {
+    alarmNodes.forEach((o) => { try { o.stop(); } catch (e) {} });
+    alarmNodes = [];
+    try { navigator.vibrate && navigator.vibrate(0); } catch (e) {}
+  }
+  function setupTimer(secs) {
+    stopAlarm(); ctStopTick();
+    ctState = { base: secs, remaining: secs, running: false, done: false, endTime: 0, tick: null };
+    const box = $("cookTimer");
+    if (secs > 0) { box.style.display = "flex"; ctRender(); }
+    else { box.style.display = "none"; }
+  }
+  function ctRender() {
+    $("ctTime").textContent = fmtTime(ctState.remaining);
+    $("cookTimer").classList.toggle("ringing", ctState.done);
+    $("ctToggle").textContent = ctState.done ? "Dismiss" : (ctState.running ? "Pause" : "Start");
+  }
+  function ctStartTick() {
+    ctStopTick();
+    ctState.tick = setInterval(() => {
+      const rem = Math.round((ctState.endTime - Date.now()) / 1000);
+      ctState.remaining = Math.max(0, rem);
+      if (rem <= 0) ctFire();
+      ctRender();
+    }, 250);
+  }
+  function ctStopTick() { if (ctState.tick) { clearInterval(ctState.tick); ctState.tick = null; } }
+  function ctFire() {
+    ctStopTick();
+    ctState.running = false; ctState.remaining = 0; ctState.done = true;
+    playAlarm(); ctRender();
+  }
+  function ctToggle() {
+    if (ctState.done) { ctReset(); return; }
+    if (ctState.running) {
+      ctState.running = false;
+      ctState.remaining = Math.max(0, Math.round((ctState.endTime - Date.now()) / 1000));
+      ctStopTick();
+    } else {
+      if (ctState.remaining <= 0) ctState.remaining = ctState.base;
+      if (ctState.remaining <= 0) return;
+      ensureAudio();
+      ctState.running = true;
+      ctState.endTime = Date.now() + ctState.remaining * 1000;
+      ctStartTick();
+    }
+    ctRender();
+  }
+  function ctAdjust(delta) {
+    stopAlarm();
+    ctState.done = false;
+    ctState.remaining = Math.max(0, ctState.remaining + delta);
+    if (ctState.remaining === 0) { ctState.running = false; ctStopTick(); }
+    else if (ctState.running) { ctState.endTime = Date.now() + ctState.remaining * 1000; }
+    ctRender();
+  }
+  function ctReset() {
+    stopAlarm(); ctStopTick();
+    ctState.running = false; ctState.done = false;
+    ctState.remaining = ctState.base;
+    ctRender();
   }
 
   function rowShell(it) {
@@ -1493,6 +1639,11 @@
   $("cookPrev").onclick = () => cookNav(-1);
   $("cookNext").onclick = () => cookNav(1);
   $("cookClose").onclick = closeCook;
+  $("ctToggle").onclick = ctToggle;
+  $("ctReset").onclick = ctReset;
+  document.querySelectorAll(".ct-adjust button").forEach((b) => {
+    b.onclick = () => ctAdjust(parseInt(b.dataset.d, 10));
+  });
 
   function openStoreSheet(store) {
     $("sheetTitle").textContent = "Store: " + store;
