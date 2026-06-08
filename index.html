@@ -468,6 +468,12 @@
   .recipe-notes { white-space: pre-wrap; line-height: 1.5; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; box-shadow: var(--shadow); cursor: pointer; }
   .recipe-notes.editing { cursor: default; padding: 0; border: none; box-shadow: none; background: none; }
   .notes-edit { width: 100%; min-height: 92px; font-family: inherit; font-size: 16px; line-height: 1.5; border: 1.5px solid var(--accent); border-radius: 12px; padding: 11px 12px; background: var(--surface); color: var(--ink); resize: none; outline: none; box-sizing: border-box; }
+  .count.attn { background: #c0392b !important; color: #fff !important; }
+  .due-banner { display: flex; align-items: center; gap: 9px; margin: 2px 0 12px; padding: 10px 13px; border-radius: 13px; background: rgba(192,57,43,.08); border: 1px solid rgba(192,57,43,.22); color: #a5341f; font-size: 14px; font-weight: 500; }
+  .due-banner b { font-weight: 700; }
+  .db-dot { width: 9px; height: 9px; border-radius: 50%; background: #c0392b; flex-shrink: 0; box-shadow: 0 0 0 4px rgba(192,57,43,.14); }
+  .item.od { border-left: 4px solid #c0392b; background: rgba(192,57,43,.05); }
+  .item.due-soon { border-left: 4px solid var(--accent2, #e0a43b); }
 </style>
 </head>
 <body>
@@ -891,6 +897,8 @@
     $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
     $("count-tasks").textContent = task.filter((i) => !i.done && (!i.due || i.due <= today)).length;
     $("count-recipes").textContent = allItems.filter((i) => i.list === "recipes").length;
+    const tAttn = task.filter((i) => !i.done && i.due && i.due <= today).length;
+    $("count-tasks").classList.toggle("attn", tAttn > 0);
 
     const list = $("list");
     list.innerHTML = "";
@@ -958,24 +966,43 @@
 
   function renderTasks(task, list) {
     const today = todayISO();
-    const active = task.filter((i) => !i.done && (!i.due || i.due <= today))
+    const notDone = task.filter((i) => !i.done);
+    const overdue = notDone.filter((i) => i.due && i.due < today)
+      .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
+    const active = notDone.filter((i) => !i.due || i.due === today)
       .sort((a, b) => orderOf(a) - orderOf(b));
     const doneArr = task.filter((i) => i.done);
-    const futureArr = task.filter((i) => !i.done && i.due && i.due > today)
+    const futureArr = notDone.filter((i) => i.due && i.due > today)
       .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
 
-    if (active.length === 0 && doneArr.length === 0 && futureArr.length === 0) {
+    if (overdue.length === 0 && active.length === 0 && doneArr.length === 0 && futureArr.length === 0) {
       list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
     }
 
+    // What-needs-attention banner
+    const todayCount = active.filter((i) => i.due === today).length;
+    if (overdue.length || todayCount) {
+      const banner = document.createElement("div");
+      banner.className = "due-banner";
+      const parts = [];
+      if (overdue.length) parts.push(`<b>${overdue.length}</b> overdue`);
+      if (todayCount) parts.push(`<b>${todayCount}</b> due today`);
+      banner.innerHTML = `<span class="db-dot"></span><span>${parts.join(" · ")}</span>`;
+      list.appendChild(banner);
+    }
+
+    // Overdue first, pinned (time-driven, not part of manual priority order)
+    for (const it of overdue) list.appendChild(taskRow(it, false));
+
+    // Priority list: no-due + due-today, drag to reorder
     const sortWrap = document.createElement("div");
     sortWrap.className = "sortable";
     for (const it of active) sortWrap.appendChild(taskRow(it, true));
     list.appendChild(sortWrap);
     makeSortable(sortWrap);
 
-    if (active.length === 0 && doneArr.length === 0) {
+    if (overdue.length === 0 && active.length === 0 && doneArr.length === 0) {
       const note = document.createElement("div");
       note.className = "empty"; note.style.padding = "26px 20px";
       note.innerHTML = `Nothing due right now 🌿`;
@@ -1847,6 +1874,10 @@
       d.className = "m-due" + (it.due < todayISO() ? " overdue" : "");
       d.textContent = dueLabel(it.due);
       meta.appendChild(d);
+    }
+    if (!it.done && it.due) {
+      if (it.due < todayISO()) el.classList.add("od");
+      else if (it.due === todayISO()) el.classList.add("due-soon");
     }
     if (it.repeatDays > 0 || it.repeatType) {
       const rl = repeatLabel(it);
