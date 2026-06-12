@@ -474,6 +474,11 @@
   .db-dot { width: 9px; height: 9px; border-radius: 50%; background: #c0392b; flex-shrink: 0; box-shadow: 0 0 0 4px rgba(192,57,43,.14); }
   .item.od { border-left: 4px solid #c0392b; background: rgba(192,57,43,.05); }
   .item.due-soon { border-left: 4px solid var(--accent2, #e0a43b); }
+  .cook-photo-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; margin: 4px 0 2px; }
+  .cook-photo-btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 15px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .cook-photo-btn svg { width: 17px; height: 17px; }
+  .cook-photo-btn:active { transform: scale(.96); }
+  .cook-photo-btn.ghost { border-color: transparent; background: none; color: var(--muted); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -561,6 +566,10 @@
     <div class="cook-title" id="cookTitle"></div>
     <div class="cook-counter" id="cookCounter"></div>
     <img id="cookPhoto" class="cook-photo" style="display:none" alt="" />
+    <div class="cook-photo-actions">
+      <button id="cookPhotoBtn" type="button" class="cook-photo-btn"></button>
+      <button id="cookPhotoRemove" type="button" class="cook-photo-btn ghost" style="display:none">Remove photo</button>
+    </div>
     <div class="cook-step" id="cookStep"></div>
     <div id="cookTimer" class="cook-timer" style="display:none">
       <div class="ct-time" id="ctTime">0:00</div>
@@ -624,6 +633,7 @@
   let importTarget = null;
   let cookSteps = [];
   let cookIdx = 0;
+  let cookRecipeId = null;
   let wakeLock = null;
   let ctState = { base: 0, remaining: 0, running: false, done: false, endTime: 0, tick: null };
   let audioCtx = null;
@@ -1429,6 +1439,7 @@
 
   async function openCook(r) {
     cookSteps = r.steps || [];
+    cookRecipeId = r.id;
     cookIdx = 0;
     $("cookTitle").textContent = r.text;
     renderCook();
@@ -1441,10 +1452,21 @@
     const ph = stepPhoto(cur);
     const img = $("cookPhoto");
     if (ph) { img.src = ph; img.style.display = "block"; } else { img.removeAttribute("src"); img.style.display = "none"; }
+    $("cookPhotoBtn").innerHTML = cameraSVG + `<span>${ph ? "Retake step photo" : "Add a photo to this step"}</span>`;
+    $("cookPhotoRemove").style.display = ph ? "" : "none";
     $("cookCounter").textContent = `Step ${cookIdx + 1} of ${cookSteps.length}`;
     $("cookPrev").disabled = cookIdx === 0;
     $("cookNext").textContent = cookIdx >= cookSteps.length - 1 ? "Done" : "Next";
     setupTimer(parseStepSeconds(stepText(cur)));
+  }
+  function cookSetPhoto(dataUrl) {
+    if (!cookRecipeId) return;
+    const next = cookSteps.slice();
+    const t = stepText(next[cookIdx]);
+    next[cookIdx] = dataUrl ? { text: t, photo: dataUrl } : t;
+    cookSteps = next;
+    updateDoc(doc(db, "items", cookRecipeId), { steps: next });
+    renderCook();
   }
   function cookNav(d) {
     if (d > 0 && cookIdx >= cookSteps.length - 1) { closeCook(); return; }
@@ -1703,6 +1725,8 @@
   $("cookPrev").onclick = () => cookNav(-1);
   $("cookNext").onclick = () => cookNav(1);
   $("cookClose").onclick = closeCook;
+  $("cookPhotoBtn").onclick = () => pickPhoto(600, (d) => cookSetPhoto(d));
+  $("cookPhotoRemove").onclick = () => cookSetPhoto("");
   $("ctToggle").onclick = ctToggle;
   $("ctReset").onclick = ctReset;
   document.querySelectorAll(".ct-adjust button").forEach((b) => {
