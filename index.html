@@ -656,6 +656,7 @@
 
   const STORES = ["Costco", "Food Basics", "Farm Boy"];
   const STORE_COLOR = { "Costco": "#2f6db0", "Food Basics": "#c75d3c", "Farm Boy": "#4f8f4a" };
+  const DEFAULT_STORE = "Food Basics";
   const nextStore = (s) => {
     const i = STORES.indexOf(s);
     return i === -1 ? STORES[0] : (i === STORES.length - 1 ? "" : STORES[i + 1]);
@@ -1193,7 +1194,7 @@
     const existing = new Set(allItems.filter((i) => i.list === "groceries" && !i.archived).map((i) => (i.text || "").toLowerCase()));
     const toAdd = [...selectedIng].filter((name) => !existing.has(name.toLowerCase()));
     for (const name of toAdd) {
-      await addDoc(itemsCol, { text: name, list: "groceries", done: false, archived: false, store: "", qty: 1, addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
+      await addDoc(itemsCol, { text: name, list: "groceries", done: false, archived: false, store: DEFAULT_STORE, qty: 1, addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
     }
     switchTab("groceries");
   }
@@ -1972,7 +1973,7 @@
     c.innerHTML = `<span class="sdot"></span><span class="stext"></span><span class="sx" aria-label="Remove">×</span>`;
     c.querySelector(".stext").textContent = it.text;
     c.querySelector(".sdot").style.background = it.store ? STORE_COLOR[it.store] : "var(--line)";
-    c.onclick = () => updateDoc(doc(db, "items", it.id), { archived: false, done: false, createdAt: serverTimestamp() });
+    c.onclick = () => updateDoc(doc(db, "items", it.id), { archived: false, done: false, store: it.store || DEFAULT_STORE, createdAt: serverTimestamp() });
     c.querySelector(".sx").onclick = (e) => { e.stopPropagation(); deleteDoc(doc(db, "items", it.id)); };
     return c;
   }
@@ -2063,7 +2064,8 @@
       return;
     }
     await addDoc(itemsCol, {
-      text, list: currentList, done: false, archived: false, store: "", qty: 1,
+      text, list: currentList, done: false, archived: false,
+      store: currentList === "groceries" ? DEFAULT_STORE : "", qty: 1,
       addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp()
     });
   }
