@@ -479,6 +479,11 @@
   .cook-photo-btn svg { width: 17px; height: 17px; }
   .cook-photo-btn:active { transform: scale(.96); }
   .cook-photo-btn.ghost { border-color: transparent; background: none; color: var(--muted); font-weight: 500; }
+  .store-dot { width: 15px; height: 15px; border-radius: 50%; flex-shrink: 0; }
+  .store-dot.none { background: transparent; box-shadow: inset 0 0 0 2px var(--line); }
+  .sheet-act.store-opt .so-label { flex: 1; }
+  .sheet-act.store-opt svg { margin-left: auto; color: var(--accent); }
+  .sheet-act.store-opt.sel { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -654,8 +659,8 @@
   }
   const firstName = (u) => (u.displayName || u.email || "?").split(/[ @]/)[0];
 
-  const STORES = ["Costco", "Food Basics", "Farm Boy"];
-  const STORE_COLOR = { "Costco": "#2f6db0", "Food Basics": "#c75d3c", "Farm Boy": "#4f8f4a" };
+  const STORES = ["Costco", "Food Basics", "Farm Boy", "Zehrs", "Fancy"];
+  const STORE_COLOR = { "Costco": "#2f6db0", "Food Basics": "#c75d3c", "Farm Boy": "#4f8f4a", "Zehrs": "#7b54c4", "Fancy": "#c45b8c" };
   const DEFAULT_STORE = "Food Basics";
   const nextStore = (s) => {
     const i = STORES.indexOf(s);
@@ -1734,16 +1739,30 @@
     b.onclick = () => ctAdjust(parseInt(b.dataset.d, 10));
   });
 
-  function openStoreSheet(store) {
-    $("sheetTitle").textContent = "Store: " + store;
+  function openStorePicker(it) {
+    $("sheetTitle").textContent = "Choose a store";
     const acts = $("sheetActions");
     acts.innerHTML = "";
-    const f = document.createElement("button");
-    f.className = "sheet-act keep";
-    f.innerHTML = filterSVG + "<span></span>";
-    f.querySelector("span").textContent = "Show only " + store;
-    f.onclick = () => { storeFilter = store; render(); closeSheet(); };
-    acts.appendChild(f);
+    const cur = it.store || "";
+    const mk = (label, value, color) => {
+      const b = document.createElement("button");
+      b.className = "sheet-act store-opt" + (value === cur ? " sel" : "");
+      const dot = color ? `<span class="store-dot" style="background:${color}"></span>` : `<span class="store-dot none"></span>`;
+      b.innerHTML = `${dot}<span class="so-label"></span>${value === cur ? checkSVG : ""}`;
+      b.querySelector(".so-label").textContent = label;
+      b.onclick = () => { updateDoc(doc(db, "items", it.id), { store: value }); closeSheet(); };
+      acts.appendChild(b);
+    };
+    STORES.forEach((s) => mk(s, s, STORE_COLOR[s]));
+    mk("No store", "", null);
+    if (cur) {
+      const f = document.createElement("button");
+      f.className = "sheet-act keep";
+      f.innerHTML = filterSVG + "<span></span>";
+      f.querySelector("span").textContent = "Show only " + cur + " items";
+      f.onclick = () => { storeFilter = cur; render(); closeSheet(); };
+      acts.appendChild(f);
+    }
     sheetOpenedAt = Date.now();
     $("sheet").classList.remove("hidden");
   }
@@ -1948,11 +1967,9 @@
       chip.textContent = store || "+ store";
       if (store) { chip.style.background = STORE_COLOR[store]; chip.style.color = "#fff"; chip.style.borderColor = "transparent"; }
       chip.onclick = () => updateDoc(doc(db, "items", it.id), { store: nextStore(store) });
-      // Long-press a set store to filter the whole list by it
-      if (store) {
-        ["touchstart", "mousedown"].forEach((ev) => chip.addEventListener(ev, (e) => e.stopPropagation()));
-        attachLongPress(chip, () => openStoreSheet(store));
-      }
+      // Long-press opens the full store picker (works even with no store set)
+      ["touchstart", "mousedown"].forEach((ev) => chip.addEventListener(ev, (e) => e.stopPropagation()));
+      attachLongPress(chip, () => openStorePicker(it));
       el.querySelector(".row-actions").appendChild(chip);
       if (sortable) addHandle(el, it);
     }
