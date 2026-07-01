@@ -267,7 +267,13 @@
 
   /* Recipe detail / cookbook */
   .recipe-actions { display: flex; gap: 10px; margin: 0 0 14px; }
-  .recipe-serves { color: var(--muted); font-size: 14px; margin: -4px 2px 14px; }
+  .recipe-serves { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--ink); font-size: 15px; margin: -4px 2px 16px; }
+  .rs-label { font-weight: 600; color: var(--muted); }
+  .rs-step { display: inline-flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; box-shadow: var(--shadow); }
+  .rs-btn { width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--bg); color: var(--ink); font-size: 19px; font-weight: 700; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+  .rs-btn:active { transform: scale(.92); }
+  .rs-n { min-width: 26px; text-align: center; font-weight: 700; font-size: 16px; }
+  .rs-link { border: none; background: none; color: var(--accent); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; padding: 4px 2px; }
   .rc-section-h { font-family: "Fraunces", serif; font-size: 19px; font-weight: 600; margin: 18px 2px 8px; }
   .step-row { display: flex; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
   .step-num { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; font-weight: 700; display: grid; place-items: center; }
@@ -642,6 +648,8 @@
   let collapsedStores = new Set();
   let upcomingOpen = true;
   let openRecipeId = null;
+  let viewServings = null;
+  let viewServingsFor = null;
   let selectedIng = new Set();
   let importTarget = null;
   let cookSteps = [];
@@ -1104,10 +1112,45 @@
       const n = (r.ingredients || []).length;
       el.querySelector(".meta").textContent = n === 1 ? "1 ingredient" : n + " ingredients";
       if (r.photo) { const t = document.createElement("span"); t.className = "gthumb"; t.style.backgroundImage = `url("${r.photo}")`; el.insertBefore(t, el.firstChild); }
-      el.onclick = () => { openRecipeId = r.id; selectedIng = new Set(); render(); };
+      el.onclick = () => { openRecipeId = r.id; viewServingsFor = null; selectedIng = new Set(); render(); };
       attachLongPress(el, () => openRecipeSheet(r));
       list.appendChild(el);
     }
+  }
+
+  const FRAC_UNI = { "½": 0.5, "⅓": 1/3, "⅔": 2/3, "¼": 0.25, "¾": 0.75, "⅕": 0.2, "⅖": 0.4, "⅗": 0.6, "⅘": 0.8, "⅙": 1/6, "⅚": 5/6, "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875 };
+  const UNI_CLASS = "½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞";
+  const parseServings = (s) => { const m = String(s || "").match(/\d+/); return m ? parseInt(m[0], 10) : null; };
+  function qtyToNum(tok) {
+    tok = tok.trim(); let m;
+    if ((m = tok.match(/^(\d+)\s+(\d+)\/(\d+)$/))) return (+m[1]) + (+m[2]) / (+m[3]);
+    if ((m = tok.match(/^(\d+)\/(\d+)$/))) return (+m[1]) / (+m[2]);
+    if ((m = tok.match(new RegExp("^(\\d+)\\s*([" + UNI_CLASS + "])$")))) return (+m[1]) + FRAC_UNI[m[2]];
+    if (FRAC_UNI[tok] != null) return FRAC_UNI[tok];
+    if (/^\d+(?:\.\d+)?$/.test(tok)) return +tok;
+    return null;
+  }
+  function fmtQty(n) {
+    if (!isFinite(n) || n <= 0) return "0";
+    const whole = Math.floor(n + 1e-9), frac = n - whole;
+    if (frac <= 0.03) return String(whole);
+    if (Math.abs(frac - 1) <= 0.04) return String(whole + 1);
+    const FR = [[.125, "⅛"], [.25, "¼"], [1/3, "⅓"], [.375, "⅜"], [.5, "½"], [.625, "⅝"], [2/3, "⅔"], [.75, "¾"], [.875, "⅞"]];
+    let best = null, bd = 1;
+    for (const [v, s] of FR) { const d = Math.abs(frac - v); if (d < bd) { bd = d; best = s; } }
+    if (bd <= 0.05) return whole > 0 ? (whole + best) : best;
+    return String(Math.round(n * 100) / 100);
+  }
+  function scaleIngredient(str, factor) {
+    if (!factor || factor === 1) return str;
+    const V = "(\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+\\s*[" + UNI_CLASS + "]|[" + UNI_CLASS + "]|\\d+(?:\\.\\d+)?)";
+    const re = new RegExp("^\\s*" + V + "(?:\\s*[-–]\\s*" + V + ")?");
+    const m = str.match(re);
+    if (!m) return str;
+    const n1 = qtyToNum(m[1]); if (n1 == null) return str;
+    let out = fmtQty(n1 * factor);
+    if (m[2]) { const n2 = qtyToNum(m[2]); if (n2 != null) out += "–" + fmtQty(n2 * factor); }
+    return out + str.slice(m[0].length);
   }
 
   function renderRecipeDetail(r, list) {
@@ -1152,12 +1195,29 @@
     }
     list.appendChild(actions);
 
-    if (r.servings) {
-      const sv = document.createElement("div");
-      sv.className = "recipe-serves";
-      sv.textContent = "Serves " + r.servings;
-      list.appendChild(sv);
+    const base = parseServings(r.servings) || 4;
+    if (viewServingsFor !== r.id) { viewServings = base; viewServingsFor = r.id; }
+    const factor = viewServings / base;
+
+    const sv = document.createElement("div");
+    sv.className = "recipe-serves";
+    sv.innerHTML = `<span class="rs-label">Serves</span>
+      <div class="rs-step"><button class="rs-btn" type="button" data-d="-1" aria-label="Fewer">−</button><span class="rs-n"></span><button class="rs-btn" type="button" data-d="1" aria-label="More">+</button></div>`;
+    sv.querySelector(".rs-n").textContent = viewServings;
+    sv.querySelectorAll(".rs-btn").forEach((b) => { b.onclick = () => { viewServings = Math.max(1, viewServings + parseInt(b.dataset.d, 10)); render(); }; });
+    if (viewServings !== base || !parseServings(r.servings)) {
+      if (viewServings !== base) {
+        const reset = document.createElement("button");
+        reset.className = "rs-link"; reset.type = "button"; reset.textContent = "Reset";
+        reset.onclick = () => { viewServings = base; render(); };
+        sv.appendChild(reset);
+      }
+      const setd = document.createElement("button");
+      setd.className = "rs-link"; setd.type = "button"; setd.textContent = "Set as default";
+      setd.onclick = () => { updateDoc(doc(db, "items", r.id), { servings: String(viewServings) }); viewServingsFor = null; render(); };
+      sv.appendChild(setd);
     }
+    list.appendChild(sv);
 
     const ih = document.createElement("div"); ih.className = "rc-section-h"; ih.textContent = "Ingredients";
     list.appendChild(ih);
@@ -1170,7 +1230,7 @@
       const el = document.createElement("div");
       el.className = "item ing-row" + (selectedIng.has(ing) ? " sel" : "");
       el.innerHTML = `<button class="ing-check" aria-label="Select"></button><div class="body"><div class="text"></div></div>`;
-      el.querySelector(".text").textContent = ing;
+      el.querySelector(".text").textContent = scaleIngredient(ing, factor);
       el.onclick = () => toggleIng(ing);
       attachLongPress(el, () => openIngredientSheet(r, ing));
       list.appendChild(el);
@@ -1219,9 +1279,11 @@
     render();
   }
 
-  async function addSelectedToGroceries() {
+  async function addSelectedToGroceries(r) {
+    let factor = 1;
+    if (r && viewServingsFor === r.id) { const base = parseServings(r.servings) || 4; factor = viewServings / base; }
     const existing = new Set(allItems.filter((i) => i.list === "groceries" && !i.archived).map((i) => (i.text || "").toLowerCase()));
-    const toAdd = [...selectedIng].filter((name) => !existing.has(name.toLowerCase()));
+    const toAdd = [...selectedIng].map((name) => scaleIngredient(name, factor)).filter((name) => !existing.has(name.toLowerCase()));
     for (const name of toAdd) {
       await addDoc(itemsCol, { text: name, list: "groceries", done: false, archived: false, store: DEFAULT_STORE, qty: 1, addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
     }
