@@ -497,6 +497,7 @@
   .sh-count { font-size: 12px; font-weight: 700; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; background: rgba(46,42,37,.08); color: var(--muted); }
   .sh-chev { color: var(--muted); font-size: 13px; width: 16px; text-align: center; }
   .store-sec { display: flex; flex-direction: column; }
+  .ing-edit { width: 100%; font-family: inherit; font-size: 18px; line-height: 1.35; border: 1.5px solid var(--accent); border-radius: 10px; padding: 8px 10px; background: var(--surface); color: var(--ink); outline: none; box-sizing: border-box; }
 </style>
 </head>
 <body>
@@ -1226,15 +1227,15 @@
       e.textContent = "No ingredients yet — add one below or paste a recipe.";
       list.appendChild(e);
     }
-    for (const ing of ings) {
+    ings.forEach((ing, idx) => {
       const el = document.createElement("div");
       el.className = "item ing-row" + (selectedIng.has(ing) ? " sel" : "");
       el.innerHTML = `<button class="ing-check" aria-label="Select"></button><div class="body"><div class="text"></div></div>`;
       el.querySelector(".text").textContent = scaleIngredient(ing, factor);
       el.onclick = () => toggleIng(ing);
-      attachLongPress(el, () => openIngredientSheet(r, ing));
+      attachLongPress(el, () => openIngredientSheet(r, idx, ing, el));
       list.appendChild(el);
-    }
+    });
     if (ings.length) {
       const btn = document.createElement("button");
       btn.className = "recipe-add-btn";
@@ -1303,22 +1304,57 @@
     $("sheet").classList.remove("hidden");
   }
 
-  function openIngredientSheet(r, ing) {
+  function openIngredientSheet(r, idx, ing, el) {
+    const ings = r.ingredients || [];
     $("sheetTitle").textContent = ing;
     const acts = $("sheetActions");
     acts.innerHTML = "";
+    const mk = (label, fn) => {
+      const b = document.createElement("button");
+      b.className = "sheet-act";
+      b.innerHTML = `<span></span>`;
+      b.querySelector("span").textContent = label;
+      b.onclick = () => { fn(); closeSheet(); };
+      acts.appendChild(b);
+    };
+    mk("✎  Edit ingredient", () => beginEditIngredient(el, r, idx, ing));
+    if (idx > 0) mk("↑  Move up", () => { const n = ings.slice(); [n[idx - 1], n[idx]] = [n[idx], n[idx - 1]]; updateDoc(doc(db, "items", r.id), { ingredients: n }); });
+    if (idx < ings.length - 1) mk("↓  Move down", () => { const n = ings.slice(); [n[idx + 1], n[idx]] = [n[idx], n[idx + 1]]; updateDoc(doc(db, "items", r.id), { ingredients: n }); });
     const del = document.createElement("button");
     del.className = "sheet-act danger";
     del.innerHTML = trashSVG + "<span>Remove from recipe</span>";
     del.onclick = () => {
-      const next = (r.ingredients || []).filter((x) => x !== ing);
-      updateDoc(doc(db, "items", r.id), { ingredients: next });
+      const n = ings.slice(); n.splice(idx, 1);
+      updateDoc(doc(db, "items", r.id), { ingredients: n });
       selectedIng.delete(ing);
       closeSheet();
     };
     acts.appendChild(del);
     sheetOpenedAt = Date.now();
     $("sheet").classList.remove("hidden");
+  }
+
+  function beginEditIngredient(el, r, idx, text) {
+    el.onclick = null;
+    el.classList.remove("sel");
+    el.innerHTML = `<input class="ing-edit" type="text" />`;
+    const inp = el.querySelector(".ing-edit");
+    inp.value = text; inp.focus();
+    try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch (e) {}
+    let saved = false;
+    const commit = () => {
+      if (saved) return; saved = true;
+      const v = inp.value.trim();
+      const next = (r.ingredients || []).slice();
+      if (v) next[idx] = v; else next.splice(idx, 1);
+      selectedIng.delete(text);
+      updateDoc(doc(db, "items", r.id), { ingredients: next });
+    };
+    inp.addEventListener("blur", commit);
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+      else if (e.key === "Escape") { e.preventDefault(); saved = true; render(); }
+    });
   }
 
   function openStepSheet(r, idx) {
