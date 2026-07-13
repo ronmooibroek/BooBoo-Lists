@@ -498,6 +498,15 @@
   .sh-chev { color: var(--muted); font-size: 13px; width: 16px; text-align: center; }
   .store-sec { display: flex; flex-direction: column; }
   .ing-edit { width: 100%; font-family: inherit; font-size: 18px; line-height: 1.35; border: 1.5px solid var(--accent); border-radius: 10px; padding: 8px 10px; background: var(--surface); color: var(--ink); outline: none; box-sizing: border-box; }
+  .req-form { display: flex; flex-direction: column; gap: 9px; background: var(--surface); border: 1px solid var(--line); border-radius: 15px; padding: 13px; margin: 0 0 14px; box-shadow: var(--shadow); }
+  .req-name, .req-note { width: 100%; font-family: inherit; font-size: 16px; border: 1.5px solid var(--line); border-radius: 11px; padding: 10px 12px; background: var(--bg); color: var(--ink); outline: none; box-sizing: border-box; }
+  .req-name:focus, .req-note:focus { border-color: var(--accent); }
+  .req-note { min-height: 64px; resize: none; line-height: 1.45; }
+  .req-actions { display: flex; gap: 9px; }
+  .req-actions .rc-btn { flex: 1; }
+  .req-row .req-mark { font-size: 20px; flex-shrink: 0; }
+  .req-banner { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; background: rgba(224,164,59,.12); border: 1px solid rgba(224,164,59,.35); border-radius: 13px; padding: 10px 13px; margin: -4px 0 14px; font-size: 14px; color: var(--ink); }
+  .req-banner .rb-text { flex: 1; min-width: 140px; }
 </style>
 </head>
 <body>
@@ -1083,6 +1092,28 @@
   }
 
   /* ---------- Recipes ---------- */
+  function beginRequestDish(btn) {
+    const form = document.createElement("div");
+    form.className = "req-form";
+    form.innerHTML = `
+      <input class="req-name" type="text" placeholder="What dish are you craving?" />
+      <textarea class="req-note" placeholder="Notes — where you had it, links, what made it great… (optional)"></textarea>
+      <div class="req-actions"><button class="rc-btn primary req-save" type="button">Add request</button><button class="rc-btn req-cancel" type="button">Cancel</button></div>`;
+    btn.replaceWith(form);
+    const name = form.querySelector(".req-name");
+    const note = form.querySelector(".req-note");
+    name.focus();
+    note.addEventListener("input", () => autoGrow(note));
+    form.querySelector(".req-cancel").onclick = () => render();
+    form.querySelector(".req-save").onclick = async () => {
+      const t = name.value.trim();
+      if (!t) { name.focus(); return; }
+      await addDoc(itemsCol, { text: t, list: "recipes", requested: true, notes: note.value.trim(), ingredients: [], steps: [], servings: "", addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp() });
+      render();
+    };
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); note.focus(); } });
+  }
+
   function renderRecipes(list) {
     if (openRecipeId) {
       const r = allItems.find((x) => x.id === openRecipeId);
@@ -1092,13 +1123,45 @@
     }
     const imp = document.createElement("button");
     imp.className = "rc-btn primary";
-    imp.style.width = "100%"; imp.style.margin = "2px 0 14px";
+    imp.style.width = "100%"; imp.style.margin = "2px 0 8px";
     imp.textContent = "⤵ Paste or scan a recipe";
     imp.onclick = () => openImport(null);
     list.appendChild(imp);
 
-    const recipes = allItems.filter((i) => i.list === "recipes").sort((a, b) => (a.text || "").localeCompare(b.text || ""));
-    if (recipes.length === 0) {
+    const reqBtn = document.createElement("button");
+    reqBtn.className = "rc-btn";
+    reqBtn.style.width = "100%"; reqBtn.style.margin = "0 0 14px";
+    reqBtn.textContent = "💭 Request a dish";
+    reqBtn.onclick = () => beginRequestDish(reqBtn);
+    list.appendChild(reqBtn);
+
+    const all = allItems.filter((i) => i.list === "recipes").sort((a, b) => (a.text || "").localeCompare(b.text || ""));
+    const requests = all.filter((r) => r.requested);
+    const recipes = all.filter((r) => !r.requested);
+
+    if (requests.length) {
+      const h = document.createElement("div"); h.className = "rc-section-h"; h.textContent = "Requested dishes";
+      list.appendChild(h);
+      for (const r of requests) {
+        const el = document.createElement("div");
+        el.className = "item recipe-row req-row";
+        el.innerHTML = `<span class="req-mark">💭</span><div class="body"><div class="text"></div><div class="meta"></div></div><span class="chev">›</span>`;
+        el.querySelector(".text").textContent = r.text;
+        const bits = [];
+        if (r.addedBy) bits.push("asked by " + r.addedBy);
+        if (r.notes) bits.push(r.notes.split("\n")[0].slice(0, 60));
+        el.querySelector(".meta").textContent = bits.join(" · ");
+        el.onclick = () => { openRecipeId = r.id; viewServingsFor = null; selectedIng = new Set(); render(); };
+        attachLongPress(el, () => openRecipeSheet(r));
+        list.appendChild(el);
+      }
+      if (recipes.length) {
+        const h2 = document.createElement("div"); h2.className = "rc-section-h"; h2.textContent = "Recipes";
+        list.appendChild(h2);
+      }
+    }
+
+    if (recipes.length === 0 && requests.length === 0) {
       const e = document.createElement("div");
       e.className = "empty";
       e.innerHTML = `<div class="em-mark">🍳</div>No recipes yet.<br>Paste one above, or type a name below.`;
@@ -1195,6 +1258,15 @@
       actions.appendChild(cookBtn);
     }
     list.appendChild(actions);
+
+    if (r.requested) {
+      const rb = document.createElement("div");
+      rb.className = "req-banner";
+      rb.innerHTML = `<span>💭</span><span class="rb-text"></span><button class="rs-link" type="button">Mark as found</button>`;
+      rb.querySelector(".rb-text").textContent = "Requested" + (r.addedBy ? " by " + r.addedBy : "") + " — paste the recipe when you find it!";
+      rb.querySelector("button").onclick = () => updateDoc(doc(db, "items", r.id), { requested: false });
+      list.appendChild(rb);
+    }
 
     const base = parseServings(r.servings) || 4;
     if (viewServingsFor !== r.id) { viewServings = base; viewServingsFor = r.id; }
@@ -1550,7 +1622,7 @@
     const r = parseRecipe(text);
     if (importTarget) {
       const existing = allItems.find((i) => i.id === importTarget);
-      const update = { ingredients: r.ingredients, steps: r.steps, servings: r.servings };
+      const update = { ingredients: r.ingredients, steps: r.steps, servings: r.servings, requested: false };
       if (existing && !((existing.text || "").trim()) && r.title) update.text = r.title;
       if (r.notes) update.notes = r.notes;
       await updateDoc(doc(db, "items", importTarget), update);
