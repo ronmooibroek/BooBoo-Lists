@@ -507,6 +507,14 @@
   .req-row .req-mark { font-size: 20px; flex-shrink: 0; }
   .req-banner { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; background: rgba(224,164,59,.12); border: 1px solid rgba(224,164,59,.35); border-radius: 13px; padding: 10px 13px; margin: -4px 0 14px; font-size: 14px; color: var(--ink); }
   .req-banner .rb-text { flex: 1; min-width: 140px; }
+  .typeahead { max-width: 600px; margin: 0 auto 9px; display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 4px; scrollbar-width: none; }
+  .typeahead::-webkit-scrollbar { display: none; }
+  .typeahead.hidden { display: none; }
+  .ta-chip { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; max-width: 240px; padding: 9px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); font-family: inherit; font-size: 15px; color: var(--ink); cursor: pointer; }
+  .ta-chip:active { transform: scale(.95); }
+  .ta-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .ta-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ta-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -553,6 +561,7 @@
     <main id="list"></main>
 
     <div class="addbar">
+      <div id="typeahead" class="typeahead hidden"></div>
       <div class="addinner">
         <input id="addInput" type="text" placeholder="Add an item…" autocomplete="off" enterkeyhint="done" />
         <button class="add" id="addBtn" aria-label="Add">
@@ -2264,6 +2273,7 @@
     if (!text || !me) return;
     input.value = "";
     input.focus(); // keep keyboard up for rapid entry
+    const ta = $("typeahead"); ta.classList.add("hidden"); ta.innerHTML = "";
     if (currentList === "recipes") {
       if (openRecipeId) {
         const r = allItems.find((i) => i.id === openRecipeId);
@@ -2306,6 +2316,44 @@
   }
   $("addBtn").onclick = addItem;
   $("addInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } });
+
+  /* ---------- Grocery typeahead ---------- */
+  function statusOf(it) { return it.archived ? "buy again" : it.done ? "crossed off" : "on list"; }
+  function renderTypeahead() {
+    const box = $("typeahead");
+    const q = $("addInput").value.trim().toLowerCase();
+    if (currentList !== "groceries" || q.length < 1) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    const seen = new Set();
+    const pool = allItems.filter((i) => i.list === "groceries" && (i.text || "").trim())
+      .filter((i) => { const k = i.text.trim().toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+    const starts = [], contains = [];
+    for (const i of pool) {
+      const t = i.text.trim().toLowerCase();
+      if (t === q) continue;
+      if (t.startsWith(q)) starts.push(i);
+      else if (t.includes(q)) contains.push(i);
+    }
+    const matches = [...starts, ...contains].slice(0, 6);
+    if (!matches.length) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+    box.innerHTML = "";
+    for (const it of matches) {
+      const b = document.createElement("button");
+      b.className = "ta-chip";
+      b.type = "button";
+      const dot = it.store ? `<span class="ta-dot" style="background:${STORE_COLOR[it.store] || "var(--muted)"}"></span>` : "";
+      b.innerHTML = `${dot}<span class="ta-name"></span><span class="ta-status"></span>`;
+      b.querySelector(".ta-name").textContent = it.text;
+      b.querySelector(".ta-status").textContent = statusOf(it);
+      // mousedown so it fires before the input blurs on iOS
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.onclick = () => { $("addInput").value = it.text; addItem(); };
+      box.appendChild(b);
+    }
+    box.classList.remove("hidden");
+  }
+  $("addInput").addEventListener("input", renderTypeahead);
+  $("addInput").addEventListener("blur", () => setTimeout(() => { $("typeahead").classList.add("hidden"); }, 150));
+  $("addInput").addEventListener("focus", renderTypeahead);
 
   /* ---------- Tabs ---------- */
   function switchTab(name) {
