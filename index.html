@@ -519,7 +519,10 @@
   .ta-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .ta-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ta-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .sheet-act.save-act { background: var(--go); color: #fff; justify-content: center; font-weight: 700; font-size: 18px; margin-top: 12px; box-shadow: 0 6px 18px rgba(15,157,84,.28); }
+  .sheet-btn-row { display: flex; gap: 10px; margin-top: 12px; }
+  .sheet-btn-row .sheet-act { flex: 1 1 0; width: auto; min-width: 0; margin: 0; justify-content: center; }
+  .sheet-btn-row .sheet-act.danger { background: rgba(192,57,43,.09); font-weight: 700; }
+  .sheet-act.save-act { background: var(--go); color: #fff; justify-content: center; font-weight: 700; font-size: 18px; box-shadow: 0 6px 18px rgba(15,157,84,.28); }
   .sheet-act.save-act svg { color: #fff; }
   .sheet-act.save-act:active { background: var(--go-dark); }
   /* ---- Readability pass: larger, sharper, higher contrast ---- */
@@ -2124,19 +2127,21 @@
     renderRepeatDetail(selType);
     acts.appendChild(rWrap);
 
-    // Save (changes apply instantly; this is confirm-and-close feedback)
+    // Save + Delete side by side (changes apply instantly; Save is confirm-and-close)
+    const btnRow = document.createElement("div");
+    btnRow.className = "sheet-btn-row";
     const save = document.createElement("button");
     save.className = "sheet-act save-act";
     save.innerHTML = checkSVG + "<span>Save</span>";
     save.onclick = () => closeSheet();
-    acts.appendChild(save);
+    btnRow.appendChild(save);
 
-    // Delete
     const del = document.createElement("button");
     del.className = "sheet-act danger";
     del.innerHTML = trashSVG + "<span>Delete</span>";
     del.onclick = () => { deleteDoc(doc(db, "items", it.id)); closeSheet(); };
-    acts.appendChild(del);
+    btnRow.appendChild(del);
+    acts.appendChild(btnRow);
 
     sheetOpenedAt = Date.now();
     $("sheet").classList.remove("hidden");
