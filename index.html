@@ -515,6 +515,9 @@
   .ta-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .ta-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ta-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .sheet-act.save-act { background: var(--accent); color: #fff; justify-content: center; font-weight: 700; margin-top: 12px; }
+  .sheet-act.save-act svg { color: #fff; }
+  .sheet-act.save-act:active { filter: brightness(.92); }
 </style>
 </head>
 <body>
@@ -2092,6 +2095,13 @@
     });
     renderRepeatDetail(selType);
     acts.appendChild(rWrap);
+
+    // Save (changes apply instantly; this is confirm-and-close feedback)
+    const save = document.createElement("button");
+    save.className = "sheet-act save-act";
+    save.innerHTML = checkSVG + "<span>Save</span>";
+    save.onclick = () => closeSheet();
+    acts.appendChild(save);
 
     // Delete
     const del = document.createElement("button");
