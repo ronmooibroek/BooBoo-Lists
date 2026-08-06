@@ -4,11 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="theme-color" content="#f7f1e8" />
+<meta name="theme-color" content="#fbf6ed" />
 <title>Our Lists</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
   :root {
@@ -25,7 +25,9 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; }
   body {
-    font-family: "DM Sans", system-ui, sans-serif;
+    font-family: "Archivo", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     background: var(--bg);
     color: var(--ink);
     background-image: radial-gradient(circle at 12% 8%, rgba(199,93,60,.06), transparent 40%),
@@ -405,17 +407,19 @@
   @keyframes floatR { 0%, 100% { transform: translateY(-50%) rotate(6deg); } 50% { transform: translateY(-36%) rotate(6deg); } }
   /* ===================== Cute polish layer ===================== */
   :root {
-    --bg: #faf5ee;
-    --surface: #fffefb;
-    --ink: #34302a;
-    --muted: #9b9082;
-    --accent: #d4623e;
-    --accent-dark: #b54e2e;
-    --accent2: #e3a14e;
-    --berry: #cf6f8f;
-    --done: #82996e;
-    --line: #ece3d5;
-    --shadow: 0 1px 2px rgba(52,48,42,.04), 0 10px 26px rgba(52,48,42,.07);
+    --bg: #fbf6ed;
+    --surface: #ffffff;
+    --ink: #211d18;
+    --muted: #786d5f;
+    --accent: #e0552b;
+    --accent-dark: #bd4120;
+    --accent2: #f2a01f;
+    --berry: #e0508a;
+    --go: #0f9d54;
+    --go-dark: #0b7f43;
+    --done: #4e9b5b;
+    --line: #e7ddcc;
+    --shadow: 0 1px 2px rgba(33,29,24,.05), 0 10px 26px rgba(33,29,24,.09);
     --r-card: 18px;
   }
   html { scroll-behavior: smooth; }
@@ -515,9 +519,33 @@
   .ta-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
   .ta-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ta-status { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .sheet-act.save-act { background: var(--accent); color: #fff; justify-content: center; font-weight: 700; margin-top: 12px; }
+  .sheet-act.save-act { background: var(--go); color: #fff; justify-content: center; font-weight: 700; font-size: 18px; margin-top: 12px; box-shadow: 0 6px 18px rgba(15,157,84,.28); }
   .sheet-act.save-act svg { color: #fff; }
-  .sheet-act.save-act:active { filter: brightness(.92); }
+  .sheet-act.save-act:active { background: var(--go-dark); }
+  /* ---- Readability pass: larger, sharper, higher contrast ---- */
+  .text { font-size: 20px; font-weight: 500; letter-spacing: -.1px; }
+  .meta { font-size: 15px; }
+  .m-due { font-size: 15px; font-weight: 600; }
+  .m-rep { font-size: 15px; }
+  .tab { font-size: 16px; font-weight: 600; }
+  .count { font-size: 13px; min-width: 21px; height: 21px; }
+  .store-chip { font-size: 14px; font-weight: 600; }
+  .sheet-act { font-size: 17px; }
+  .sheet-title { font-size: 18px; font-weight: 600; }
+  .sheet-label { font-size: 13px; letter-spacing: .6px; }
+  .store-head { font-size: 17px; }
+  .sh-count { font-size: 13px; }
+  .suggest-h, .up-title { font-size: 20px; }
+  .schip, .person { font-size: 16px; }
+  .ing-row .text { font-size: 19px; }
+  .step-row .text, .rc-step { font-size: 18px; line-height: 1.5; }
+  .recipe-notes { font-size: 17px; }
+  .cook-step { letter-spacing: -.2px; }
+  #addInput { font-size: 18px; }
+  .ta-chip { font-size: 16px; }
+  .rc-btn { font-size: 16px; font-weight: 600; }
+  .empty { font-size: 17px; }
+  .due-banner { font-size: 15px; font-weight: 600; }
 </style>
 </head>
 <body>
