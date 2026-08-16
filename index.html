@@ -393,7 +393,7 @@
   .intro-greet { font-family: "Fraunces", serif; font-size: 32px; font-weight: 600; }
   .intro-sub { color: var(--muted); font-size: 14px; letter-spacing: .4px; }
   .photo-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 8px; }
-  .heart-stage { position: relative; display: grid; place-items: center; width: 300px; max-width: 86vw; height: 200px; }
+  .heart-stage { position: relative; display: grid; place-items: center; width: 320px; max-width: 92vw; height: 232px; margin-bottom: 10px; }
   .intro-avs { position: absolute; inset: 0; pointer-events: none; }
   .intro-av {
     position: absolute; top: 50%; width: 66px; height: 66px; border-radius: 50%;
@@ -405,6 +405,20 @@
   .intro-av.right { right: 4px; transform: translateY(-50%) rotate(6deg); animation: floatR 3.2s ease-in-out infinite; }
   @keyframes floatL { 0%, 100% { transform: translateY(-50%) rotate(-6deg); } 50% { transform: translateY(-64%) rotate(-6deg); } }
   @keyframes floatR { 0%, 100% { transform: translateY(-50%) rotate(6deg); } 50% { transform: translateY(-36%) rotate(6deg); } }
+  /* Floating family (Coco, Shayla, Chance, Rory) */
+  .intro-fam {
+    position: absolute; width: 50px; height: 50px; border-radius: 50%;
+    background-size: cover; background-position: center; border: 3px solid var(--bg);
+    box-shadow: 0 5px 14px rgba(33,29,24,.22); display: grid; place-items: center;
+    color: #fff; font-weight: 700; font-size: 18px; overflow: hidden;
+  }
+  .intro-fam.empty { background: var(--line); color: var(--muted); }
+  .intro-fam.f1 { top: -6px; left: 20%; animation: bobA 3.6s ease-in-out infinite; }
+  .intro-fam.f2 { top: -12px; right: 20%; animation: bobB 4.1s ease-in-out infinite .3s; }
+  .intro-fam.f3 { bottom: -8px; left: 26%; animation: bobB 3.9s ease-in-out infinite .6s; }
+  .intro-fam.f4 { bottom: -14px; right: 26%; animation: bobA 4.3s ease-in-out infinite .9s; }
+  @keyframes bobA { 0%, 100% { transform: translateY(0) rotate(-5deg); } 50% { transform: translateY(-13px) rotate(4deg); } }
+  @keyframes bobB { 0%, 100% { transform: translateY(0) rotate(5deg); } 50% { transform: translateY(-15px) rotate(-4deg); } }
   /* ===================== Cute polish layer ===================== */
   :root {
     --bg: #fbf6ed;
@@ -549,6 +563,9 @@
   .rc-btn { font-size: 16px; font-weight: 600; }
   .empty { font-size: 17px; }
   .due-banner { font-size: 15px; font-weight: 600; }
+  .fam-thumb { width: 44px; height: 44px; border-radius: 50%; background-size: cover; background-position: center; flex-shrink: 0; display: grid; place-items: center; font-weight: 700; font-size: 17px; }
+  .fam-thumb.empty { background: var(--line); color: var(--muted); }
+  .profiles-title { font-size: 18px; }
 </style>
 </head>
 <body>
@@ -714,6 +731,8 @@
   let alarmNodes = [];
   let allItems = [];
   let profiles = {};
+  let familyPhotos = {};
+  const FAMILY = ["Coco", "Shayla", "Chance", "Rory"];
   let pendingPhoto = null;
   let unsub = null;
   let me = null;
@@ -803,7 +822,16 @@
   function photoFor(uid) { return uid ? (profiles[uid] || "") : ""; }
   function rebuildProfiles() {
     profiles = {};
-    for (const it of allItems) if (it.kind === "profile" && it.uid && it.photo) profiles[it.uid] = it.photo;
+    familyPhotos = {};
+    for (const it of allItems) {
+      if (it.kind === "profile" && it.uid && it.photo) profiles[it.uid] = it.photo;
+      else if (it.kind === "family" && it.name && it.photo) familyPhotos[it.name] = it.photo;
+    }
+  }
+  async function setFamilyPhoto(name, dataUrl) {
+    const existing = allItems.find((i) => i.kind === "family" && i.name === name);
+    if (existing) await updateDoc(doc(db, "items", existing.id), { photo: dataUrl });
+    else await addDoc(itemsCol, { kind: "family", name, photo: dataUrl, createdAt: serverTimestamp() });
   }
   function avatarEl(uid, name, cls) {
     const el = document.createElement("span");
@@ -954,6 +982,15 @@
       const ph = photoFor(p.uid);
       if (ph) av.style.backgroundImage = `url("${ph}")`;
       else { av.style.background = p.uid ? colorFor(p.uid) : "var(--line)"; av.textContent = (p.name || "?")[0].toUpperCase(); }
+      stage.appendChild(av);
+    });
+    FAMILY.forEach((name, i) => {
+      const av = document.createElement("span");
+      av.className = "intro-fam f" + (i + 1);
+      const ph = familyPhotos[name];
+      if (ph) av.style.backgroundImage = `url("${ph}")`;
+      else { av.classList.add("empty"); av.textContent = name[0].toUpperCase(); }
+      av.title = name;
       stage.appendChild(av);
     });
   }
@@ -1911,7 +1948,7 @@
   });
 
   function openProfilesSheet() {
-    $("sheetTitle").textContent = "Profile photos";
+    $("sheetTitle").textContent = "Family photos";
     const acts = $("sheetActions");
     acts.innerHTML = "";
     const people = knownPeople();
@@ -1934,6 +1971,35 @@
       row.appendChild(btn);
       acts.appendChild(row);
     }
+
+    const fh = document.createElement("div");
+    fh.className = "sheet-label";
+    fh.textContent = "THE REST OF THE FAMILY";
+    fh.style.margin = "16px 0 4px";
+    acts.appendChild(fh);
+    for (const name of FAMILY) {
+      const row = document.createElement("div");
+      row.className = "sheet-section profile-row";
+      const av = document.createElement("span");
+      av.className = "fam-thumb";
+      const ph = familyPhotos[name];
+      if (ph) av.style.backgroundImage = `url("${ph}")`;
+      else { av.classList.add("empty"); av.textContent = name[0]; }
+      row.appendChild(av);
+      const n = document.createElement("span"); n.className = "profile-name"; n.textContent = name;
+      row.appendChild(n);
+      const btn = document.createElement("button");
+      btn.className = "profile-btn";
+      btn.textContent = ph ? "Change" : "Choose photo";
+      btn.onclick = () => pickPhoto(160, async (dataUrl) => {
+        await setFamilyPhoto(name, dataUrl);
+        familyPhotos[name] = dataUrl;
+        openProfilesSheet();
+      });
+      row.appendChild(btn);
+      acts.appendChild(row);
+    }
+
     sheetOpenedAt = Date.now();
     $("sheet").classList.remove("hidden");
   }
