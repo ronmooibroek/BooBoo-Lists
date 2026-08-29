@@ -566,6 +566,9 @@
   .fam-thumb { width: 44px; height: 44px; border-radius: 50%; background-size: cover; background-position: center; flex-shrink: 0; display: grid; place-items: center; font-weight: 700; font-size: 17px; }
   .fam-thumb.empty { background: var(--line); color: var(--muted); }
   .profiles-title { font-size: 18px; }
+  .task-notes { width: 100%; min-height: 76px; font-family: inherit; font-size: 17px; line-height: 1.45; border: 1.5px solid var(--line); border-radius: 12px; padding: 11px 12px; background: var(--bg); color: var(--ink); resize: none; outline: none; box-sizing: border-box; }
+  .task-notes:focus { border-color: var(--accent); background: var(--surface); }
+  .m-note { font-size: 15px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 </style>
 </head>
 <body>
@@ -2112,6 +2115,19 @@
     for (const p of knownPeople()) addPerson(p.uid, p.name);
     acts.appendChild(aWrap);
 
+    // Instructions / notes
+    const nWrap = document.createElement("div"); nWrap.className = "sheet-section";
+    nWrap.innerHTML = `<div class="sheet-label">Instructions</div><textarea class="task-notes" placeholder="Details, steps, where things are, what to buy…"></textarea>`;
+    const nta = nWrap.querySelector(".task-notes");
+    nta.value = it.notes || "";
+    autoGrow(nta);
+    nta.addEventListener("input", () => autoGrow(nta));
+    let nTimer = null;
+    const saveNotes = () => { updateDoc(doc(db, "items", it.id), { notes: nta.value.trim() }); };
+    nta.addEventListener("input", () => { clearTimeout(nTimer); nTimer = setTimeout(saveNotes, 600); });
+    nta.addEventListener("blur", () => { clearTimeout(nTimer); saveNotes(); });
+    acts.appendChild(nWrap);
+
     // Due date
     const dWrap = document.createElement("div"); dWrap.className = "sheet-section";
     dWrap.innerHTML = `<div class="sheet-label">Due date</div><div class="due-row"><input type="date" class="due-input"><button class="due-clear">Clear</button></div>`;
@@ -2199,7 +2215,7 @@
     const save = document.createElement("button");
     save.className = "sheet-act save-act";
     save.innerHTML = checkSVG + "<span>Save</span>";
-    save.onclick = () => closeSheet();
+    save.onclick = () => { clearTimeout(nTimer); saveNotes(); closeSheet(); };
     btnRow.appendChild(save);
 
     const del = document.createElement("button");
@@ -2238,6 +2254,12 @@
     if (it.repeatDays > 0 || it.repeatType) {
       const rl = repeatLabel(it);
       if (rl) { const r = document.createElement("span"); r.className = "m-rep"; r.textContent = rl; meta.appendChild(r); }
+    }
+    if (it.notes) {
+      const n = document.createElement("span");
+      n.className = "m-note";
+      n.textContent = "📝 " + it.notes.split("\n")[0].slice(0, 40) + (it.notes.length > 40 ? "…" : "");
+      meta.appendChild(n);
     }
     if (!meta.children.length) meta.remove();
 
