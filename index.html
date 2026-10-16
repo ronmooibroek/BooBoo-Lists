@@ -478,6 +478,13 @@
   /* Softer section headings */
   .suggest-h, .rc-section-h, .up-title, .recipe-title, .overlay-title, .signin h1, .brand { letter-spacing: -.3px; }
 
+  /* Small phones: keep the three tabs on one line without crowding */
+  @media (max-width: 420px) {
+    .tabs { margin: 4px 10px 8px; gap: 4px; }
+    .tab { font-size: 12.5px; gap: 4px; padding: 12px 3px; }
+    header { padding: 20px 16px 12px; padding-top: max(20px, env(safe-area-inset-top)); }
+  }
+
   /* Respect users who prefer reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -1031,7 +1038,7 @@
     const task = allItems.filter((i) => i.list === "tasks");
     const today = todayISO();
     $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
-    $("count-tasks").textContent = task.filter((i) => !i.done && (!i.due || i.due <= today)).length;
+    $("count-tasks").textContent = task.filter((i) => !i.done).length;
     $("count-recipes").textContent = allItems.filter((i) => i.list === "recipes").length;
     const tAttn = task.filter((i) => !i.done && i.due && i.due <= today).length;
     $("count-tasks").classList.toggle("attn", tAttn > 0);
