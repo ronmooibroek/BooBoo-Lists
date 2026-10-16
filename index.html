@@ -549,6 +549,8 @@
   .store-chip { font-size: 14px; font-weight: 600; }
   .sheet-act { font-size: 17px; }
   .sheet-title { font-size: 18px; font-weight: 600; }
+  .sheet-title-input { width: 100%; font-size: 18px; font-weight: 600; font-family: inherit; color: var(--ink); background: transparent; border: none; outline: none; padding: 0; }
+  .sheet-title-input:focus { border-bottom: 1.5px solid var(--accent); }
   .sheet-label { font-size: 13px; letter-spacing: .6px; }
   .store-head { font-size: 17px; }
   .sh-count { font-size: 13px; }
@@ -2089,7 +2091,22 @@
   }
 
   function openTaskSheet(it) {
-    $("sheetTitle").textContent = it.text;
+    // Task name is editable right in the sheet header
+    const titleEl = $("sheetTitle");
+    titleEl.innerHTML = "";
+    const titleInput = document.createElement("input");
+    titleInput.className = "sheet-title-input";
+    titleInput.value = it.text || "";
+    titleInput.setAttribute("aria-label", "Task name");
+    titleEl.appendChild(titleInput);
+    let titleTimer = null;
+    const saveTitle = () => {
+      const v = titleInput.value.trim();
+      if (v && v !== it.text) { it.text = v; updateDoc(doc(db, "items", it.id), { text: v }); }
+      else if (!v) { titleInput.value = it.text; } // don't allow blank names
+    };
+    titleInput.addEventListener("input", () => { clearTimeout(titleTimer); titleTimer = setTimeout(saveTitle, 600); });
+    titleInput.addEventListener("blur", () => { clearTimeout(titleTimer); saveTitle(); });
     const acts = $("sheetActions");
     acts.innerHTML = "";
 
@@ -2215,7 +2232,7 @@
     const save = document.createElement("button");
     save.className = "sheet-act save-act";
     save.innerHTML = checkSVG + "<span>Save</span>";
-    save.onclick = () => { clearTimeout(nTimer); saveNotes(); closeSheet(); };
+    save.onclick = () => { clearTimeout(nTimer); saveNotes(); clearTimeout(titleTimer); saveTitle(); closeSheet(); };
     btnRow.appendChild(save);
 
     const del = document.createElement("button");
