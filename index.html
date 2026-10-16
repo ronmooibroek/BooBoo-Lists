@@ -721,7 +721,7 @@
   let currentList = "groceries";
   let storeFilter = null;
   let collapsedStores = new Set();
-  let upcomingOpen = true;
+  let collapsedTaskCats = new Set(); // task date-category sections, all expanded by default
   let openRecipeId = null;
   let viewServings = null;
   let viewServingsFor = null;
@@ -1109,43 +1109,70 @@
 
   function renderTasks(task, list) {
     const today = todayISO();
+    const tomorrow = addDays(today, 1);
     const notDone = task.filter((i) => !i.done);
-    const overdue = notDone.filter((i) => i.due && i.due < today)
-      .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
-    const active = notDone.filter((i) => !i.due || i.due === today)
-      .sort((a, b) => orderOf(a) - orderOf(b));
+    const byDueAsc = (a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : orderOf(a) - orderOf(b));
+    const byOrder = (a, b) => orderOf(a) - orderOf(b);
+    const overdue = notDone.filter((i) => i.due && i.due < today).sort(byDueAsc);
+    const todayArr = notDone.filter((i) => i.due === today).sort(byOrder);
+    const tomorrowArr = notDone.filter((i) => i.due === tomorrow).sort(byOrder);
+    const restArr = notDone.filter((i) => !i.due || i.due > tomorrow)
+      .sort((a, b) => {
+        if (a.due && b.due) return byDueAsc(a, b);
+        if (a.due) return -1;
+        if (b.due) return 1;
+        return byOrder(a, b);
+      });
     const doneArr = task.filter((i) => i.done);
-    const futureArr = notDone.filter((i) => i.due && i.due > today)
-      .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : 0));
 
-    if (overdue.length === 0 && active.length === 0 && doneArr.length === 0 && futureArr.length === 0) {
+    if (overdue.length === 0 && todayArr.length === 0 && tomorrowArr.length === 0 && restArr.length === 0 && doneArr.length === 0) {
       list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
     }
 
     // What-needs-attention banner
-    const todayCount = active.filter((i) => i.due === today).length;
-    if (overdue.length || todayCount) {
+    if (overdue.length || todayArr.length) {
       const banner = document.createElement("div");
       banner.className = "due-banner";
       const parts = [];
       if (overdue.length) parts.push(`<b>${overdue.length}</b> overdue`);
-      if (todayCount) parts.push(`<b>${todayCount}</b> due today`);
+      if (todayArr.length) parts.push(`<b>${todayArr.length}</b> due today`);
       banner.innerHTML = `<span class="db-dot"></span><span>${parts.join(" · ")}</span>`;
       list.appendChild(banner);
     }
 
-    // Overdue first, pinned (time-driven, not part of manual priority order)
-    for (const it of overdue) list.appendChild(taskRow(it, false));
+    // Collapsible date categories
+    const cat = (key, title, items, sortable) => {
+      if (!items.length) return;
+      const wrap = document.createElement("div");
+      wrap.className = "upcoming";
+      const head = document.createElement("button");
+      head.className = "upcoming-head";
+      const collapsed = collapsedTaskCats.has(key);
+      head.innerHTML = `<span class="up-title"></span><span class="up-count">${items.length}</span><span class="up-chev">${collapsed ? "▸" : "▾"}</span>`;
+      head.querySelector(".up-title").textContent = title;
+      head.onclick = () => { if (collapsed) collapsedTaskCats.delete(key); else collapsedTaskCats.add(key); render(); };
+      wrap.appendChild(head);
+      if (!collapsed) {
+        if (sortable) {
+          const sw = document.createElement("div");
+          sw.className = "sortable";
+          for (const it of items) sw.appendChild(taskRow(it, true));
+          wrap.appendChild(sw);
+          makeSortable(sw);
+        } else {
+          for (const it of items) wrap.appendChild(taskRow(it, false));
+        }
+      }
+      list.appendChild(wrap);
+    };
 
-    // Priority list: no-due + due-today, drag to reorder
-    const sortWrap = document.createElement("div");
-    sortWrap.className = "sortable";
-    for (const it of active) sortWrap.appendChild(taskRow(it, true));
-    list.appendChild(sortWrap);
-    makeSortable(sortWrap);
+    cat("overdue", "Overdue", overdue, false);
+    cat("today", "Today", todayArr, true);
+    cat("tomorrow", "Tomorrow", tomorrowArr, true);
+    cat("rest", "Everything else", restArr, false);
 
-    if (overdue.length === 0 && active.length === 0 && doneArr.length === 0) {
+    if (overdue.length === 0 && todayArr.length === 0 && tomorrowArr.length === 0 && restArr.length === 0) {
       const note = document.createElement("div");
       note.className = "empty"; note.style.padding = "26px 20px";
       note.innerHTML = `Nothing due right now 🌿`;
@@ -1160,19 +1187,6 @@
       btn.textContent = "Clear completed";
       btn.onclick = () => deleteMany(doneArr);
       list.appendChild(btn);
-    }
-
-    if (futureArr.length) {
-      const wrap = document.createElement("div");
-      wrap.className = "upcoming";
-      const head = document.createElement("button");
-      head.className = "upcoming-head";
-      head.innerHTML = `<span class="up-title">Upcoming</span><span class="up-count"></span><span class="up-chev">${upcomingOpen ? "▾" : "▸"}</span>`;
-      head.querySelector(".up-count").textContent = futureArr.length;
-      head.onclick = () => { upcomingOpen = !upcomingOpen; render(); };
-      wrap.appendChild(head);
-      if (upcomingOpen) for (const it of futureArr) wrap.appendChild(taskRow(it, false));
-      list.appendChild(wrap);
     }
   }
 
