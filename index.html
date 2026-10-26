@@ -302,6 +302,13 @@
   .overlay-btns { display: flex; gap: 10px; margin-top: 12px; }
   .overlay-cancel { width: 100%; background: none; border: none; color: var(--muted); font-family: inherit; font-size: 15px; font-weight: 600; padding: 14px; cursor: pointer; margin-top: 4px; }
 
+  /* Grocery import list (items handed over from recipe cards via #import links) */
+  .gi-list { margin-top: 4px; max-height: 46vh; overflow-y: auto; }
+  .gi-row { display: flex; align-items: center; gap: 10px; background: var(--bg); border-radius: 12px; padding: 12px 14px; margin: 6px 0; }
+  .gi-name { flex: 1; font-size: 16px; font-weight: 500; word-break: break-word; }
+  .gi-tag { color: var(--muted); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .gi-off { opacity: .45; pointer-events: none; }
+
   /* Cooking mode */
   .cook { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; overflow-y: auto; padding: 30px 24px; text-align: center; }
   .cook > .cook-title { margin-top: auto; }
@@ -669,6 +676,20 @@
     </div>
   </div>
 
+  <!-- Grocery import overlay (items handed over from recipe cards via #import links) -->
+  <div id="grocImport" class="overlay hidden">
+    <div class="overlay-card">
+      <div class="overlay-title">Add groceries?</div>
+      <p class="overlay-sub" id="grocImportSub">These came from a recipe card. Add them to your grocery list?</p>
+      <div id="grocImportList" class="gi-list"></div>
+      <div id="grocImportStatus" class="import-status"></div>
+      <div class="overlay-btns">
+        <button id="grocImportAdd" class="rc-btn primary">Add items</button>
+      </div>
+      <button id="grocImportCancel" class="overlay-cancel">Cancel</button>
+    </div>
+  </div>
+
   <!-- Cooking mode -->
   <div id="cook" class="cook hidden">
     <button id="cookClose" class="cook-close" aria-label="Exit">✕</button>
@@ -756,6 +777,7 @@
   const FAMILY = ["Coco", "Shayla", "Chance", "Rory"];
   let pendingPhoto = null;
   let unsub = null;
+  let itemsLoaded = false; // true once the first items snapshot has arrived
   let me = null;
 
   const $ = (id) => document.getElementById(id);
@@ -1019,9 +1041,12 @@
   /* ---------- Live data ---------- */
   function startSync() {
     if (unsub) unsub();
+    itemsLoaded = false;
     const q = query(itemsCol, orderBy("createdAt", "asc"));
     unsub = onSnapshot(q, (snap) => {
       allItems = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      itemsLoaded = true;
+      maybeShowGrocImport();
       rebuildProfiles();
       updateHeaderAvatar();
       if (!$("intro").classList.contains("hidden")) renderIntroAvatars();
@@ -2503,6 +2528,160 @@
   }
   $("addBtn").onclick = addItem;
   $("addInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } });
+
+  /* ---------- Grocery import links (#import=[...]) ---------- */
+  // Recipe cook-along cards hand groceries over as
+  //   #import=<encodeURIComponent(JSON array of plain ingredient names)>
+  // Nothing is written until the user confirms in the dialog below.
+  let pendingImport = null;   // sanitized names waiting on sign-in + first snapshot
+  let grocImportOpen = false;
+
+  function sanitizeImportNames(arr) {
+    if (!Array.isArray(arr)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const v of arr) {
+      if (typeof v !== "string") continue;
+      const t = v.trim();
+      if (!t) continue;
+      const k = t.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(t);
+      if (out.length >= 50) break;
+    }
+    return out;
+  }
+
+  function stashImport(names) {
+    if (!names.length) return;
+    pendingImport = names;
+    try { sessionStorage.setItem("pendingImport", JSON.stringify(names)); } catch (e) { /* private mode etc. */ }
+    maybeShowGrocImport();
+  }
+
+  function clearPendingImport() {
+    pendingImport = null;
+    try { sessionStorage.removeItem("pendingImport"); } catch (e) { /* ignore */ }
+  }
+
+  function handleImportHash() {
+    const h = location.hash || "";
+    if (!h.startsWith("#import=")) return;
+    // Clear the hash right away so a refresh never re-triggers the import.
+    history.replaceState(null, "", location.pathname + location.search);
+    let names = [];
+    try { names = sanitizeImportNames(JSON.parse(decodeURIComponent(h.slice("#import=".length)))); }
+    catch (e) { names = []; }
+    stashImport(names);
+  }
+
+  function grocActiveMatch(name) {
+    const k = name.toLowerCase();
+    return allItems.some((i) => i.list === "groceries" && !i.done && !i.archived && (i.text || "").trim().toLowerCase() === k);
+  }
+
+  function maybeShowGrocImport() {
+    if (grocImportOpen || !pendingImport || !pendingImport.length) return;
+    if (!me || !itemsLoaded) return; // dialog waits for sign-in + first snapshot
+    showGrocImport();
+  }
+
+  function showGrocImport() {
+    grocImportOpen = true;
+    $("grocImportSub").textContent = "These came from a recipe card. Add them to your grocery list?";
+    $("grocImportStatus").textContent = "";
+    $("grocImportCancel").textContent = "Cancel";
+    const list = $("grocImportList");
+    list.innerHTML = "";
+    let fresh = 0;
+    for (const name of pendingImport) {
+      const row = document.createElement("div");
+      row.className = "gi-row";
+      const n = document.createElement("span");
+      n.className = "gi-name";
+      n.textContent = name;
+      row.appendChild(n);
+      if (grocActiveMatch(name)) {
+        const tag = document.createElement("span");
+        tag.className = "gi-tag";
+        tag.textContent = "already on your list";
+        row.appendChild(tag);
+      } else fresh++;
+      list.appendChild(row);
+    }
+    const addBtn = $("grocImportAdd");
+    addBtn.textContent = fresh === 1 ? "Add 1 item" : "Add " + fresh + " items";
+    addBtn.classList.toggle("gi-off", fresh === 0);
+    addBtn.classList.remove("hidden");
+    $("grocImport").classList.remove("hidden");
+  }
+
+  function closeGrocImport() {
+    grocImportOpen = false;
+    $("grocImport").classList.add("hidden");
+  }
+
+  async function confirmGrocImport() {
+    if (!me || !pendingImport) return;
+    const names = pendingImport;
+    const addBtn = $("grocImportAdd");
+    addBtn.classList.add("gi-off");
+    addBtn.textContent = "Adding…";
+    let added = 0, already = 0;
+    try {
+      for (const name of names) {
+        // Same dedupe/revive semantics as the groceries branch of addItem(),
+        // except: never pop the store picker during an import.
+        const match = allItems.find((i) => i.list === "groceries" && (i.text || "").trim().toLowerCase() === name.toLowerCase());
+        if (match) {
+          if (match.done || match.archived) {
+            // Revive from crossed-off / Buy again instead of duplicating
+            await updateDoc(doc(db, "items", match.id), { done: false, archived: false, qty: 1, store: match.store || DEFAULT_STORE, createdAt: serverTimestamp() });
+            added++;
+          } else already++;
+        } else {
+          await addDoc(itemsCol, {
+            text: name, list: "groceries", done: false, archived: false, store: DEFAULT_STORE, qty: 1,
+            addedBy: firstName(me), uid: me.uid, createdAt: serverTimestamp()
+          });
+          added++;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      $("grocImportStatus").textContent = "Something went wrong — some items may not have been added.";
+      addBtn.classList.add("hidden");
+      $("grocImportCancel").textContent = "Close";
+      clearPendingImport();
+      return;
+    }
+    clearPendingImport();
+    const parts = [];
+    if (added) parts.push("Added " + added + (added === 1 ? " item" : " items"));
+    if (already) parts.push(already + (already === 1 ? " was" : " were") + " already on your list");
+    $("grocImportSub").textContent = parts.length ? parts.join(" · ") : "Nothing to add.";
+    $("grocImportList").innerHTML = "";
+    addBtn.classList.add("hidden");
+    $("grocImportCancel").textContent = "Done";
+  }
+
+  $("grocImportAdd").onclick = confirmGrocImport;
+  $("grocImportCancel").onclick = () => { clearPendingImport(); closeGrocImport(); };
+  window.addEventListener("hashchange", handleImportHash);
+  handleImportHash();
+  if (!pendingImport) {
+    // Pick up an import stashed earlier in this tab session (e.g. the page
+    // was reloaded while signed out, before sign-in completed).
+    try {
+      const saved = sessionStorage.getItem("pendingImport");
+      if (saved) {
+        const names = sanitizeImportNames(JSON.parse(saved));
+        if (names.length) pendingImport = names;
+      }
+    } catch (e) { /* ignore */ }
+  }
+  maybeShowGrocImport();
 
   /* ---------- Grocery typeahead ---------- */
   function statusOf(it) { return it.archived ? "buy again" : it.done ? "crossed off" : "on list"; }
