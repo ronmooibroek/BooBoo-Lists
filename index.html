@@ -75,6 +75,14 @@
     background: none; border: none; color: var(--muted); font-family: inherit;
     font-size: 13px; cursor: pointer; padding: 6px; text-decoration: underline; text-underline-offset: 2px;
   }
+  .waketoggle {
+    display: inline-flex; align-items: center; gap: 5px;
+    min-height: 40px; padding: 7px 12px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); color: var(--muted);
+    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    box-shadow: var(--shadow); transition: all .15s ease; white-space: nowrap;
+  }
+  .waketoggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   /* ---------- Tabs ---------- */
   .tabs {
@@ -626,6 +634,7 @@
     <header>
       <div class="brand">Our Lists</div>
       <div class="who">
+        <button class="waketoggle" id="wakeToggle" aria-pressed="false" title="Keep the screen from locking while you use the app">💡 Awake</button>
         <div class="avatar" id="avatar"></div>
         <button class="signout" id="signoutBtn">Sign out</button>
       </div>
@@ -768,6 +777,10 @@
   let cookIdx = 0;
   let cookRecipeId = null;
   let wakeLock = null;
+  let wlBusy = false; // a wake-lock request is in flight
+  let keepAwake = false; // app-wide "keep screen on" toggle (persisted)
+  let cookAwake = false; // cook mode holds the screen on while it is open
+  try { keepAwake = localStorage.getItem("bb-keepawake") === "1"; } catch (e) {}
   let ctState = { base: 0, remaining: 0, running: false, done: false, endTime: 0, tick: null };
   let audioCtx = null;
   let alarmNodes = [];
@@ -977,6 +990,8 @@
   initGoogle();
 
   $("signoutBtn").onclick = () => signOut(auth);
+  $("wakeToggle").onclick = toggleKeepAwake;
+  syncWakeLock(); // apply a persisted "on" from a previous visit
 
   onAuthStateChanged(auth, (user) => {
     $("loading").classList.add("hidden");
@@ -1777,6 +1792,48 @@
     render();
   }
 
+  // ---- Screen wake lock (keep-alive) ----
+  // One shared lock, wanted by either the app-wide toggle or cook mode.
+  function wakeWanted() { return keepAwake || cookAwake; }
+  function renderWakeToggle() {
+    const b = $("wakeToggle");
+    if (!b) return;
+    if (!navigator.wakeLock) { b.style.display = "none"; return; }
+    b.classList.toggle("on", keepAwake);
+    b.setAttribute("aria-pressed", keepAwake ? "true" : "false");
+  }
+  async function syncWakeLock() {
+    renderWakeToggle();
+    if (!navigator.wakeLock) return;
+    if (wakeWanted() && !wakeLock && !wlBusy && !document.hidden) {
+      wlBusy = true;
+      try {
+        const lock = await navigator.wakeLock.request("screen");
+        wakeLock = lock;
+        lock.addEventListener("release", () => {
+          if (wakeLock === lock) wakeLock = null;
+          // The browser drops the lock when the page is hidden or the
+          // screen is manually locked; re-grab it if it is still wanted.
+          if (wakeWanted() && !document.hidden) syncWakeLock();
+        });
+      } catch (e) { /* not granted right now (some browsers want a user gesture first) — the next tap retries */ }
+      wlBusy = false;
+      // The want may have switched off while the request was in flight.
+      if (!wakeWanted() && wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    } else if (!wakeWanted() && wakeLock) {
+      try { wakeLock.release(); } catch (e) {}
+      wakeLock = null;
+    }
+  }
+  function toggleKeepAwake() {
+    keepAwake = !keepAwake;
+    try { localStorage.setItem("bb-keepawake", keepAwake ? "1" : "0"); } catch (e) {}
+    syncWakeLock();
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) syncWakeLock(); });
+  // If a persisted "on" could not be granted at load, the first tap retries.
+  document.addEventListener("pointerdown", () => { if (wakeWanted() && !wakeLock) syncWakeLock(); });
+
   async function openCook(r) {
     cookSteps = r.steps || [];
     cookRecipeId = r.id;
@@ -1784,7 +1841,7 @@
     $("cookTitle").textContent = r.text;
     renderCook();
     $("cook").classList.remove("hidden");
-    try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+    cookAwake = true; syncWakeLock();
   }
   function renderCook() {
     const cur = cookSteps[cookIdx];
@@ -1816,7 +1873,7 @@
   function closeCook() {
     $("cook").classList.add("hidden");
     stopAlarm(); ctStopTick();
-    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    cookAwake = false; syncWakeLock();
   }
 
   // ---- Cook-mode step timer ----
