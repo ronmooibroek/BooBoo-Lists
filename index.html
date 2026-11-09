@@ -1078,9 +1078,9 @@
     const task = allItems.filter((i) => i.list === "tasks");
     const today = todayISO();
     $("count-groceries").textContent = groc.filter((i) => !i.done && !i.archived).length;
-    $("count-tasks").textContent = task.filter((i) => !i.done).length;
+    const tAttn = task.filter((i) => !i.done && i.due && i.due < today).length;
+    $("count-tasks").textContent = tAttn;
     $("count-recipes").textContent = allItems.filter((i) => i.list === "recipes").length;
-    const tAttn = task.filter((i) => !i.done && i.due && i.due <= today).length;
     $("count-tasks").classList.toggle("attn", tAttn > 0);
 
     const list = $("list");
