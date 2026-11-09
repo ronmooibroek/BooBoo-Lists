@@ -1169,10 +1169,12 @@
     const notDone = task.filter((i) => !i.done);
     const byDueAsc = (a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : orderOf(a) - orderOf(b));
     const byOrder = (a, b) => orderOf(a) - orderOf(b);
+    const horizon = addDays(today, 14);
+    const hiddenFuture = notDone.filter((i) => i.due && i.due > horizon);
     const overdue = notDone.filter((i) => i.due && i.due < today).sort(byDueAsc);
     const todayArr = notDone.filter((i) => i.due === today).sort(byOrder);
     const tomorrowArr = notDone.filter((i) => i.due === tomorrow).sort(byOrder);
-    const restArr = notDone.filter((i) => !i.due || i.due > tomorrow)
+    const restArr = notDone.filter((i) => !i.due || (i.due > tomorrow && i.due <= horizon))
       .sort((a, b) => {
         if (a.due && b.due) return byDueAsc(a, b);
         if (a.due) return -1;
@@ -1181,7 +1183,7 @@
       });
     const doneArr = task.filter((i) => i.done);
 
-    if (overdue.length === 0 && todayArr.length === 0 && tomorrowArr.length === 0 && restArr.length === 0 && doneArr.length === 0) {
+    if (overdue.length === 0 && todayArr.length === 0 && tomorrowArr.length === 0 && restArr.length === 0 && doneArr.length === 0 && hiddenFuture.length === 0) {
       list.innerHTML = `<div class="empty"><div class="em-mark">🌿</div>Nothing here yet.<br>Add the first item below.</div>`;
       return;
     }
@@ -1232,6 +1234,13 @@
       const note = document.createElement("div");
       note.className = "empty"; note.style.padding = "26px 20px";
       note.innerHTML = `Nothing due right now 🌿`;
+      list.appendChild(note);
+    }
+
+    if (hiddenFuture.length) {
+      const note = document.createElement("div");
+      note.className = "empty"; note.style.padding = "10px 20px"; note.style.fontSize = "13px"; note.style.opacity = "0.7";
+      note.textContent = `${hiddenFuture.length} task${hiddenFuture.length === 1 ? "" : "s"} due in more than 2 weeks — hidden until ${hiddenFuture.length === 1 ? "it is" : "they are"} closer`;
       list.appendChild(note);
     }
 
