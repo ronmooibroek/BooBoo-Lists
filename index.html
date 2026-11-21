@@ -767,6 +767,7 @@
   let currentList = "groceries";
   let storeFilter = null;
   let collapsedStores = new Set();
+  let collapsedBuyAgainStores = new Set(); // Buy again store sections, all expanded by default
   let collapsedTaskCats = new Set(); // task date-category sections, all expanded by default
   let openRecipeId = null;
   let viewServings = null;
@@ -1156,9 +1157,28 @@
     if (suggestions.length) {
       const wrap = document.createElement("div");
       wrap.className = "suggest";
-      wrap.innerHTML = `<div class="suggest-h">Buy again</div><div class="chips"></div>`;
-      const chips = wrap.querySelector(".chips");
-      for (const it of suggestions) chips.appendChild(suggestionChip(it));
+      wrap.innerHTML = `<div class="suggest-h">Buy again</div>`;
+      // Group suggestions by store (same order as the main list), alphabetical within each, collapsible
+      const sugGroups = {};
+      for (const it of suggestions) { const k = it.store || ""; (sugGroups[k] = sugGroups[k] || []).push(it); }
+      const sugOrder = [...STORES.filter((s) => sugGroups[s]), ...(sugGroups[""] ? [""] : [])];
+      for (const store of sugOrder) {
+        const items = sugGroups[store].sort((a, b) => (a.text || "").localeCompare(b.text || "", undefined, { sensitivity: "base" }));
+        const collapsed = collapsedBuyAgainStores.has(store);
+        const head = document.createElement("button");
+        head.className = "store-head";
+        const dotStyle = store ? `background:${STORE_COLOR[store] || "var(--muted)"}` : "background:transparent;box-shadow:inset 0 0 0 2px var(--line)";
+        head.innerHTML = `<span class="sh-dot" style="${dotStyle}"></span><span class="sh-name"></span><span class="sh-count">${items.length}</span><span class="sh-chev">${collapsed ? "▸" : "▾"}</span>`;
+        head.querySelector(".sh-name").textContent = store || "No store";
+        head.onclick = () => { if (collapsed) collapsedBuyAgainStores.delete(store); else collapsedBuyAgainStores.add(store); render(); };
+        wrap.appendChild(head);
+        if (!collapsed) {
+          const chips = document.createElement("div");
+          chips.className = "chips";
+          for (const it of items) chips.appendChild(suggestionChip(it));
+          wrap.appendChild(chips);
+        }
+      }
       list.appendChild(wrap);
     }
   }
