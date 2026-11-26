@@ -570,6 +570,16 @@
   .sheet-act.save-act { background: var(--go); color: #fff; justify-content: center; font-weight: 700; font-size: 18px; box-shadow: 0 6px 18px rgba(15,157,84,.28); }
   .sheet-act.save-act svg { color: #fff; }
   .sheet-act.save-act:active { background: var(--go-dark); }
+  .edit-name { width: 100%; box-sizing: border-box; }
+  .qty-edit-row { display: flex; align-items: center; gap: 16px; }
+  .qty-step {
+    width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; cursor: pointer;
+    border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+    font-family: inherit; font-size: 22px; font-weight: 600; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qty-step:active { transform: scale(.93); }
+  .qty-num { font-size: 18px; font-weight: 700; min-width: 30px; text-align: center; }
   /* ---- Readability pass: larger, sharper, higher contrast ---- */
   .text { font-size: 20px; font-weight: 500; letter-spacing: -.1px; }
   .meta { font-size: 15px; }
@@ -816,6 +826,7 @@
   const saveSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>`;
   const filterSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>`;
   const cameraSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3l2-2h8l2 2h3v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg>`;
+  const editSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>`;
   const stepText = (s) => (typeof s === "string" ? s : (s && s.text) || "");
   const stepPhoto = (s) => (typeof s === "string" ? "" : (s && s.photo) || "");
   const gripSVG = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>`;
@@ -2058,6 +2069,12 @@
       acts.appendChild(img);
     }
     if (it.list === "groceries") {
+      const edit = document.createElement("button");
+      edit.className = "sheet-act";
+      edit.innerHTML = editSVG + "<span>Edit</span>";
+      edit.onclick = () => openEditItemSheet(it);
+      acts.appendChild(edit);
+
       const keep = document.createElement("button");
       keep.className = "sheet-act keep";
       keep.innerHTML = saveSVG + "<span>Keep for next time</span>";
@@ -2092,6 +2109,76 @@
   $("sheet").addEventListener("click", (e) => {
     if (e.target.id === "sheet" && Date.now() - sheetOpenedAt > 350) closeSheet();
   });
+
+  // Edit form for a grocery item: name, quantity, store. Edits stay local
+  // until Save, which updates the existing doc in place (photo, done and
+  // archived flags are untouched). Cancel/backdrop leaves the item as-is.
+  function openEditItemSheet(it) {
+    $("sheetTitle").textContent = "Edit item";
+    const acts = $("sheetActions");
+    acts.innerHTML = "";
+
+    // Name
+    const nWrap = document.createElement("div"); nWrap.className = "sheet-section";
+    nWrap.innerHTML = `<div class="sheet-label">Item</div><input type="text" class="due-input edit-name" aria-label="Item name">`;
+    const nameInput = nWrap.querySelector(".edit-name");
+    nameInput.value = it.text || "";
+    acts.appendChild(nWrap);
+
+    // Quantity (tap stepper, min 1)
+    let qty = Math.max(1, it.qty || 1);
+    const qWrap = document.createElement("div"); qWrap.className = "sheet-section";
+    qWrap.innerHTML = `<div class="sheet-label">Quantity</div><div class="qty-edit-row"><button class="qty-step" aria-label="One less">−</button><span class="qty-num"></span><button class="qty-step" aria-label="One more">+</button></div>`;
+    const qNum = qWrap.querySelector(".qty-num");
+    const qBtns = qWrap.querySelectorAll(".qty-step");
+    const qRender = () => { qNum.textContent = qty; };
+    qBtns[0].onclick = () => { qty = Math.max(1, qty - 1); qRender(); };
+    qBtns[1].onclick = () => { qty = Math.min(99, qty + 1); qRender(); };
+    qRender();
+    acts.appendChild(qWrap);
+
+    // Store (same option rows as the store picker; applies on Save)
+    let store = it.store || "";
+    const sLabel = document.createElement("div");
+    sLabel.className = "sheet-label";
+    sLabel.textContent = "Store";
+    sLabel.style.margin = "14px 4px 2px";
+    acts.appendChild(sLabel);
+    const optBtns = [];
+    const paintStore = () => optBtns.forEach(({ b, value }) => {
+      b.classList.toggle("sel", value === store);
+      b.querySelector(".so-check").innerHTML = value === store ? checkSVG : "";
+    });
+    const mkStore = (label, value, color) => {
+      const b = document.createElement("button");
+      b.className = "sheet-act store-opt";
+      const dot = color ? `<span class="store-dot" style="background:${color}"></span>` : `<span class="store-dot none"></span>`;
+      b.innerHTML = `${dot}<span class="so-label"></span><span class="so-check"></span>`;
+      b.querySelector(".so-label").textContent = label;
+      b.onclick = () => { store = value; paintStore(); };
+      optBtns.push({ b, value });
+      acts.appendChild(b);
+    };
+    STORES.forEach((s) => mkStore(s, s, STORE_COLOR[s]));
+    mkStore("No store", "", null);
+    paintStore();
+
+    const doSave = () => {
+      const name = nameInput.value.trim();
+      updateDoc(doc(db, "items", it.id), { text: name || it.text, store, qty });
+      closeSheet();
+    };
+    nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSave(); } });
+
+    const save = document.createElement("button");
+    save.className = "sheet-act save-act";
+    save.innerHTML = checkSVG + "<span>Save</span>";
+    save.onclick = doSave;
+    acts.appendChild(save);
+
+    sheetOpenedAt = Date.now();
+    $("sheet").classList.remove("hidden");
+  }
 
   function openProfilesSheet() {
     $("sheetTitle").textContent = "Family photos";
